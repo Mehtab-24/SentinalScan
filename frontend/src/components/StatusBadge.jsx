@@ -1,20 +1,20 @@
-/** Status → Tailwind colour mapping (covers backend values + common variants) */
+/** Status → Tailwind colour mapping for dark dashboard theme */
 const STATUS_STYLES = {
-  PENDING:     'bg-slate-100  text-slate-600  ring-slate-300',
-  QUEUED:      'bg-slate-100  text-slate-600  ring-slate-300',
-  RUNNING:     'bg-blue-100   text-blue-700   ring-blue-300',
-  IN_PROGRESS: 'bg-yellow-100 text-yellow-700 ring-yellow-300',
-  COMPLETED:   'bg-green-100  text-green-700  ring-green-300',
-  FAILED:      'bg-red-100    text-red-700    ring-red-300',
+  PENDING:     'bg-slate-700/60  text-slate-300  ring-slate-600',
+  QUEUED:      'bg-slate-700/60  text-slate-300  ring-slate-600',
+  RUNNING:     'bg-blue-900/60   text-blue-300   ring-blue-700',
+  IN_PROGRESS: 'bg-yellow-900/60 text-yellow-300 ring-yellow-700',
+  COMPLETED:   'bg-green-900/60  text-green-300  ring-green-700',
+  FAILED:      'bg-red-900/60    text-red-300    ring-red-700',
 };
 
 const STATUS_DOTS = {
   PENDING:     'bg-slate-400',
   QUEUED:      'bg-slate-400',
-  RUNNING:     'bg-blue-500 animate-pulse',
-  IN_PROGRESS: 'bg-yellow-500 animate-pulse',
-  COMPLETED:   'bg-green-500',
-  FAILED:      'bg-red-500',
+  RUNNING:     'bg-blue-400 animate-pulse',
+  IN_PROGRESS: 'bg-yellow-400 animate-pulse',
+  COMPLETED:   'bg-green-400',
+  FAILED:      'bg-red-400',
 };
 
 /**
@@ -23,7 +23,7 @@ const STATUS_DOTS = {
  */
 export default function StatusBadge({ status }) {
   const label    = status ?? 'UNKNOWN';
-  const colours  = STATUS_STYLES[label] ?? 'bg-slate-100 text-slate-600 ring-slate-300';
+  const colours  = STATUS_STYLES[label] ?? 'bg-slate-700/60 text-slate-300 ring-slate-600';
   const dotColor = STATUS_DOTS[label]   ?? 'bg-slate-400';
 
   return (

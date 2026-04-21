@@ -1,43 +1,56 @@
-import { scoreColorText, scoreColorBar } from '../utils/scoreColors';
+import { scoreColorText, scoreColorBar, scoreColorBg, scoreLabel } from '../utils/scoreColors';
 
 /**
  * ScoreCard — large overall security score card.
  * @param {{ score: number|null, grade?: string, summary?: string }} props
  */
 export default function ScoreCard({ score, grade, summary }) {
+  const bgClass    = scoreColorBg(score);
+  const textClass  = scoreColorText(score);
+  const barClass   = scoreColorBar(score);
+  const label      = scoreLabel(score);
+
   return (
     <section
       aria-label="Overall Security Score"
-      className="rounded-xl border border-gray-200 bg-gray-50 p-6"
+      className={`rounded-xl border p-6 ${bgClass}`}
     >
-      <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">
-        Overall Score
-      </p>
-
-      <div className="flex items-end gap-3 mb-3">
-        <span className={`text-6xl font-bold leading-none ${scoreColorText(score)}`}>
-          {score ?? '—'}
-        </span>
-        <span className="text-2xl font-semibold text-gray-300 mb-1">/ 100</span>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+          Overall Score
+        </p>
         {grade && (
-          <span className="mb-1 rounded-md bg-gray-200 px-2 py-0.5 text-sm font-semibold text-gray-600">
-            {grade}
+          <span className="rounded-md bg-slate-700 px-2.5 py-1 text-sm font-bold text-slate-200">
+            Grade {grade}
           </span>
         )}
       </div>
 
+      {/* Score number */}
+      <div className="flex items-end gap-3 mb-4">
+        <span className={`text-7xl font-extrabold leading-none tabular-nums ${textClass}`}>
+          {score ?? '—'}
+        </span>
+        <div className="flex flex-col mb-1">
+          <span className="text-xl font-semibold text-slate-600">/ 100</span>
+          <span className={`text-xs font-semibold ${textClass}`}>{label}</span>
+        </div>
+      </div>
+
       {/* Score bar */}
       {score != null && (
-        <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden mb-4">
+        <div className="h-2.5 w-full rounded-full bg-slate-700/60 overflow-hidden mb-4">
           <div
-            className={`h-full rounded-full transition-all duration-700 ${scoreColorBar(score)}`}
+            className={`h-full rounded-full transition-all duration-700 ${barClass}`}
             style={{ width: `${score}%` }}
           />
         </div>
       )}
 
       {summary && (
-        <p className="text-sm text-gray-500 leading-relaxed">{summary}</p>
+        <p className="text-sm text-slate-400 leading-relaxed border-t border-slate-700/50 pt-4 mt-2">
+          {summary}
+        </p>
       )}
     </section>
   );
