@@ -11,13 +11,32 @@ const TERMINAL_STATUSES = ['COMPLETED', 'FAILED'];
 const ACTIVE_STATUSES   = ['PENDING', 'RUNNING', 'IN_PROGRESS'];
 const POLL_INTERVAL_MS  = 4000;
 
+/** Neon glow panel wrapper */
+function GlassPanel({ children, style = {}, className = '' }) {
+  return (
+    <div
+      className={`rounded-2xl overflow-hidden ${className}`}
+      style={{
+        background:     'rgba(4, 10, 22, 0.75)',
+        border:         '1px solid rgba(0,212,255,0.1)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        boxShadow:      '0 4px 32px rgba(0,0,0,0.4)',
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /**
- * ScanResultPage — live-polling scan detail view.
+ * ScanResultPage — live-polling scan detail view with neon theme.
  * Route: /scans/:id
  */
 export default function ScanResultPage() {
-  const { id }    = useParams();
-  const navigate  = useNavigate();
+  const { id }   = useParams();
+  const navigate = useNavigate();
 
   const [scan, setScan]             = useState(null);
   const [fetchError, setFetchError] = useState('');
@@ -38,7 +57,6 @@ export default function ScanResultPage() {
         clearInterval(intervalRef.current);
       }
     }
-
     fetchScan();
     intervalRef.current = setInterval(fetchScan, POLL_INTERVAL_MS);
     return () => clearInterval(intervalRef.current);
@@ -49,160 +67,283 @@ export default function ScanResultPage() {
     return cleanup;
   }, [startPolling]);
 
-  // Manual retry — clears error state and re-starts polling
   function handleRetryFetch() {
     setFetchError('');
     setRetrying(true);
     clearInterval(intervalRef.current);
-    setTimeout(() => {
-      setRetrying(false);
-      startPolling();
-    }, 600);
+    setTimeout(() => { setRetrying(false); startPolling(); }, 600);
   }
 
-  // Retry the scan itself (navigate to home pre-filled — simplest approach: go home)
-  function handleRetryScan() {
-    navigate('/');
-  }
+  function handleRetryScan() { navigate('/'); }
 
   const isActive   = scan && ACTIVE_STATUSES.includes(scan.status);
   const isComplete = scan?.status === 'COMPLETED';
   const isFailed   = scan?.status === 'FAILED';
 
   return (
-    <div className="min-h-screen bg-[#0f1117]">
+    <div className="min-h-screen" style={{ background: '#020408' }}>
+      {/* Background glow */}
+      <div
+        className="fixed pointer-events-none"
+        style={{
+          top: '-30%', left: '20%',
+          width: '60vw', height: '60vw',
+          background: 'radial-gradient(circle, rgba(0,212,255,0.04) 0%, transparent 70%)',
+          zIndex: 0,
+        }}
+      />
+      <div className="scan-line" />
+
       <Navbar />
 
-      <main className="mx-auto max-w-3xl px-6 py-10 space-y-5">
+      <main className="relative z-10 mx-auto max-w-3xl px-6 pt-28 pb-16 space-y-5">
 
-        {/* ── Initial page load ── */}
+        {/* ── Initial loading ── */}
         {!scan && !fetchError && (
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 py-20 flex flex-col items-center gap-5">
-            <Spinner size="h-10 w-10" color="text-blue-500" />
-            <div className="text-center space-y-1">
-              <p className="text-sm font-medium text-slate-300">Loading scan details…</p>
-              <p className="text-xs text-slate-600">Scan ID: {id}</p>
+          <GlassPanel>
+            <div className="py-24 flex flex-col items-center gap-6">
+              {/* Glow ring spinner */}
+              <div className="relative">
+                <div
+                  className="absolute inset-0 rounded-full blur-xl animate-pulse"
+                  style={{
+                    background: 'radial-gradient(circle, rgba(0,212,255,0.3) 0%, transparent 70%)',
+                    transform:  'scale(2)',
+                  }}
+                />
+                <Spinner size="h-14 w-14" color="text-cyan-400" />
+              </div>
+              <div className="text-center space-y-2">
+                <p className="text-base font-bold text-slate-200">Loading scan details…</p>
+                <p
+                  className="text-xs font-mono"
+                  style={{ color: 'rgba(0,212,255,0.4)' }}
+                >
+                  SCAN_ID: {id}
+                </p>
+              </div>
             </div>
-          </div>
+          </GlassPanel>
         )}
 
-        {/* ── Fetch / network error ── */}
+        {/* ── Fetch error ── */}
         {fetchError && (
-          <div className="rounded-2xl border border-red-800/60 bg-red-900/20 p-6">
-            <div className="flex gap-3 mb-4">
-              <span className="text-red-400 text-xl shrink-0 mt-0.5">⚠</span>
+          <GlassPanel
+            style={{
+              border:     '1px solid rgba(239,68,68,0.3)',
+              boxShadow:  '0 0 20px rgba(239,68,68,0.08)',
+            }}
+          >
+            <div className="p-6 flex gap-4 border-b border-red-900/30">
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-red-400"
+                style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)' }}
+              >
+                ✕
+              </div>
               <div>
-                <p className="text-sm font-semibold text-red-300">Unable to load scan</p>
+                <p className="text-sm font-bold text-red-300">Unable to load scan</p>
                 <p className="text-sm text-red-400 mt-1 leading-relaxed">{fetchError}</p>
               </div>
             </div>
-            <button
-              onClick={handleRetryFetch}
-              disabled={retrying}
-              className="flex items-center gap-2 rounded-xl border border-red-700/50 bg-red-900/40
-                         px-4 py-2 text-sm font-semibold text-red-300
-                         hover:bg-red-800/40 hover:text-red-200 transition-all duration-150
-                         disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {retrying ? <Spinner size="h-3.5 w-3.5" color="text-red-400" /> : '↺'}
-              {retrying ? 'Retrying…' : 'Retry'}
-            </button>
-          </div>
+            <div className="px-6 py-4">
+              <button
+                onClick={handleRetryFetch}
+                disabled={retrying}
+                className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold tracking-wide transition-all duration-200 disabled:opacity-50"
+                style={{
+                  background: 'rgba(239,68,68,0.12)',
+                  border:     '1px solid rgba(239,68,68,0.3)',
+                  color:      '#f87171',
+                }}
+              >
+                {retrying ? <Spinner size="h-3.5 w-3.5" color="text-red-400" /> : '↺'}
+                {retrying ? 'Retrying…' : 'Retry Connection'}
+              </button>
+            </div>
+          </GlassPanel>
         )}
 
         {scan && (
           <>
             {/* ── Header card ── */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 overflow-hidden">
+            <GlassPanel>
               {/* Repo name + badge */}
-              <div className="px-7 py-5 flex items-start justify-between gap-4 border-b border-slate-800">
-                <div className="min-w-0">
-                  <h1 className="text-lg font-bold text-slate-100 truncate">
-                    {scan.repoName ?? scan.repoUrl ?? `Scan #${id}`}
-                  </h1>
-                  <p className="text-xs text-slate-600 mt-0.5">Scan ID: {id}</p>
+              <div className="px-7 py-5 flex items-start justify-between gap-4" style={{ borderBottom: '1px solid rgba(0,212,255,0.08)' }}>
+                <div className="min-w-0 flex items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(0,102,204,0.6), rgba(0,212,255,0.4))',
+                      border:     '1px solid rgba(0,212,255,0.3)',
+                      boxShadow:  '0 0 12px rgba(0,212,255,0.2)',
+                    }}
+                  >
+                    ⬡
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="text-base font-bold text-slate-100 truncate">
+                      {scan.repoName ?? scan.repoUrl ?? `Scan #${id}`}
+                    </h1>
+                    <p
+                      className="text-xs mt-0.5 font-mono"
+                      style={{ color: 'rgba(0,212,255,0.35)' }}
+                    >
+                      ID: {id}
+                    </p>
+                  </div>
                 </div>
                 <StatusBadge status={scan.status} />
               </div>
 
-              {/* Status banner — adapts colour per state */}
+              {/* Status banner */}
               <div
-                className={[
-                  'px-7 py-3.5 flex items-center gap-3 text-sm font-medium border-b',
-                  isComplete
-                    ? 'bg-green-900/20 border-green-800/30 text-green-300'
+                className="px-7 py-3.5 flex items-center gap-3 text-sm font-medium"
+                style={{
+                  background: isComplete
+                    ? 'rgba(16,185,129,0.06)'
                     : isFailed
-                    ? 'bg-red-900/20 border-red-800/30 text-red-300'
-                    : isActive
-                    ? 'bg-blue-900/20 border-blue-800/30 text-blue-300'
-                    : 'bg-slate-800/40 border-slate-700/30 text-slate-400',
-                ].join(' ')}
+                    ? 'rgba(239,68,68,0.06)'
+                    : 'rgba(0,212,255,0.06)',
+                  borderBottom: '1px solid rgba(0,212,255,0.05)',
+                }}
               >
-                {isActive   && <Spinner size="h-4 w-4" color="text-blue-400" />}
+                {isActive   && <Spinner size="h-4 w-4" color="text-cyan-400" />}
                 {isComplete && (
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500/20 text-green-400 text-xs font-bold">✓</span>
+                  <span
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-emerald-400"
+                    style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)' }}
+                  >
+                    ✓
+                  </span>
                 )}
                 {isFailed && (
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500/20 text-red-400 text-xs font-bold">✕</span>
+                  <span
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-red-400"
+                    style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)' }}
+                  >
+                    ✕
+                  </span>
                 )}
 
-                {/* State-specific messages */}
-                {isActive && (
-                  <span>Scanning repository… this may take up to 1–2 minutes</span>
-                )}
-                {isComplete && <span>Scan completed successfully</span>}
-                {isFailed   && <span>Scan failed — see error details below</span>}
-                {!isActive && !isComplete && !isFailed && (
-                  <span>{scan.status}</span>
-                )}
+                <span
+                  style={{
+                    color: isComplete ? '#10b981' : isFailed ? '#f87171' : '#00d4ff',
+                    textShadow: isComplete
+                      ? '0 0 8px rgba(16,185,129,0.5)'
+                      : isFailed
+                      ? '0 0 8px rgba(239,68,68,0.5)'
+                      : '0 0 8px rgba(0,212,255,0.5)',
+                  }}
+                >
+                  {isActive   && 'Scanning repository… this may take up to 1–2 minutes'}
+                  {isComplete && 'Scan completed successfully'}
+                  {isFailed   && 'Scan failed — see error details below'}
+                  {!isActive && !isComplete && !isFailed && scan.status}
+                </span>
 
                 {isActive && (
-                  <span className="ml-auto text-xs text-slate-600 tabular-nums">
-                    Auto-updating…
+                  <span className="ml-auto text-xs" style={{ color: 'rgba(0,212,255,0.3)' }}>
+                    Auto-updating every 4s…
                   </span>
                 )}
               </div>
-            </div>
+            </GlassPanel>
 
-            {/* ── Scanning progress card ── */}
+            {/* ── Scanning in progress ── */}
             {isActive && (
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 py-14 flex flex-col items-center gap-5">
-                <div className="relative">
-                  {/* Outer glow ring */}
-                  <div className="absolute inset-0 rounded-full bg-blue-500/10 blur-xl scale-150" />
-                  <Spinner size="h-14 w-14" color="text-blue-500" />
+              <GlassPanel>
+                <div className="py-20 flex flex-col items-center gap-6">
+                  {/* Animated scanner rings */}
+                  <div className="relative flex items-center justify-center">
+                    {[1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="absolute rounded-full border animate-ping"
+                        style={{
+                          width:         `${i * 40 + 40}px`,
+                          height:        `${i * 40 + 40}px`,
+                          borderColor:   `rgba(0,212,255,${0.3 / i})`,
+                          animationDuration: `${1.5 + i * 0.5}s`,
+                          animationDelay:    `${(i - 1) * 0.3}s`,
+                        }}
+                      />
+                    ))}
+                    <div
+                      className="relative flex h-16 w-16 items-center justify-center rounded-full"
+                      style={{
+                        background: 'rgba(0,212,255,0.1)',
+                        border:     '2px solid rgba(0,212,255,0.4)',
+                        boxShadow:  '0 0 30px rgba(0,212,255,0.3)',
+                      }}
+                    >
+                      <Spinner size="h-8 w-8" color="text-cyan-400" />
+                    </div>
+                  </div>
+
+                  <div className="text-center space-y-2">
+                    <p
+                      className="text-lg font-bold"
+                      style={{ color: '#00d4ff', textShadow: '0 0 15px rgba(0,212,255,0.5)' }}
+                    >
+                      Scanning Repository…
+                    </p>
+                    <p className="text-sm text-slate-500 max-w-xs leading-relaxed">
+                      Running Semgrep static analysis and Trivy dependency scanning.
+                      This may take up to{' '}
+                      <span className="text-slate-300 font-medium">1–2 minutes</span>.
+                    </p>
+                  </div>
+
+                  <div
+                    className="flex items-center gap-2 rounded-full px-4 py-2"
+                    style={{
+                      background: 'rgba(0,212,255,0.05)',
+                      border:     '1px solid rgba(0,212,255,0.15)',
+                    }}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full animate-pulse"
+                      style={{ background: '#00d4ff', boxShadow: '0 0 6px #00d4ff' }}
+                    />
+                    <span className="text-xs" style={{ color: 'rgba(0,212,255,0.5)' }}>
+                      Results will appear here automatically
+                    </span>
+                  </div>
                 </div>
-                <div className="text-center space-y-2">
-                  <p className="text-base font-semibold text-slate-200">
-                    Scanning repository…
-                  </p>
-                  <p className="text-sm text-slate-500 max-w-xs leading-relaxed">
-                    Running Semgrep static analysis and Trivy dependency scanning.
-                    This may take up to <span className="text-slate-300 font-medium">1–2 minutes</span>.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/80 px-4 py-1.5 mt-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-                  <span className="text-xs text-slate-500">Results will appear here automatically</span>
-                </div>
-              </div>
+              </GlassPanel>
             )}
 
-            {/* ── Score section — COMPLETED only ── */}
+            {/* ── Score section — COMPLETED ── */}
             {isComplete && (
-              <div className="space-y-4">
+              <div className="space-y-4 animate-fade-in">
                 {/* Success banner */}
-                <div className="rounded-2xl border border-green-800/40 bg-green-900/15 px-6 py-4 flex items-center gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500/20 text-green-400 text-sm font-bold">
+                <div
+                  className="rounded-2xl px-6 py-4 flex items-center gap-3"
+                  style={{
+                    background: 'rgba(16,185,129,0.07)',
+                    border:     '1px solid rgba(16,185,129,0.25)',
+                    boxShadow:  '0 0 20px rgba(16,185,129,0.08)',
+                  }}
+                >
+                  <div
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-emerald-400"
+                    style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', boxShadow: '0 0 12px rgba(16,185,129,0.3)' }}
+                  >
                     ✓
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-green-300">Scan completed successfully</p>
-                    <p className="text-xs text-green-600 mt-0.5">Your security report is ready below</p>
+                    <p
+                      className="text-sm font-bold"
+                      style={{ color: '#10b981', textShadow: '0 0 8px rgba(16,185,129,0.5)' }}
+                    >
+                      Scan completed successfully
+                    </p>
+                    <p className="text-xs text-slate-600 mt-0.5">Your security report is ready below</p>
                   </div>
                 </div>
 
-                {/* Tool score cards */}
+                {/* Mini score cards — 2-col */}
                 <div className="grid grid-cols-2 gap-4">
                   <MiniScoreCard
                     label="Semgrep"
@@ -227,43 +368,67 @@ export default function ScanResultPage() {
               </div>
             )}
 
-            {/* ── Failure alert — FAILED only ── */}
+            {/* ── Failure — FAILED ── */}
             {isFailed && (
-              <div className="rounded-2xl border border-red-800/60 bg-red-900/20 overflow-hidden">
+              <GlassPanel
+                style={{
+                  border:    '1px solid rgba(239,68,68,0.25)',
+                  boxShadow: '0 0 30px rgba(239,68,68,0.07)',
+                }}
+              >
                 {/* Alert header */}
-                <div className="flex items-center gap-3 px-6 py-4 border-b border-red-800/40">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-400 text-sm font-bold">
+                <div
+                  className="flex items-center gap-3 px-6 py-4"
+                  style={{ borderBottom: '1px solid rgba(239,68,68,0.15)' }}
+                >
+                  <div
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-red-400"
+                    style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', boxShadow: '0 0 12px rgba(239,68,68,0.25)' }}
+                  >
                     ✕
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-red-300">Scan failed</p>
-                    <p className="text-xs text-red-600 mt-0.5">The scan could not be completed</p>
+                    <p
+                      className="text-sm font-bold text-red-300"
+                      style={{ textShadow: '0 0 8px rgba(239,68,68,0.4)' }}
+                    >
+                      Scan Failed
+                    </p>
+                    <p className="text-xs text-slate-600 mt-0.5">The scan could not be completed</p>
                   </div>
                 </div>
 
-                {/* Error message body */}
+                {/* Error body */}
                 <div className="px-6 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-2">
-                    Error details
+                  <p
+                    className="text-xs font-bold tracking-widest uppercase mb-3"
+                    style={{ color: 'rgba(239,68,68,0.5)' }}
+                  >
+                    Error Details
                   </p>
-                  <p className="text-sm text-red-300 leading-relaxed font-mono bg-red-950/40 rounded-lg px-4 py-3 border border-red-900/60">
+                  <div
+                    className="rounded-xl px-4 py-3 font-mono text-sm text-red-300 leading-relaxed"
+                    style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}
+                  >
                     {scan.errorMessage ?? 'An unknown error occurred during the scan.'}
-                  </p>
+                  </div>
                 </div>
 
-                {/* Retry action */}
-                <div className="px-6 pb-5 pt-1">
+                {/* Retry */}
+                <div className="px-6 pb-5">
                   <button
                     onClick={handleRetryScan}
-                    className="inline-flex items-center gap-2 rounded-xl bg-red-600/80 px-5 py-2.5
-                               text-sm font-semibold text-white
-                               hover:bg-red-600 transition-all duration-150
-                               active:scale-[0.98]"
+                    className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold tracking-wide text-white transition-all duration-200"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(220,38,38,0.8), rgba(239,68,68,0.8))',
+                      border:     '1px solid rgba(239,68,68,0.4)',
+                      boxShadow:  '0 0 20px rgba(239,68,68,0.2)',
+                    }}
                   >
-                    ↺ Try a new scan
+                    ↺ Try a New Scan
                   </button>
                 </div>
-              </div>
+              </GlassPanel>
             )}
           </>
         )}
