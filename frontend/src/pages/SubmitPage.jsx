@@ -1,88 +1,26 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { motion, useInView } from 'framer-motion';
 import RepoSubmitForm from '../components/RepoSubmitForm';
 import Navbar from '../components/Navbar';
 import { Link } from 'react-router-dom';
+import CyberScene from '../components/CyberScene/CyberScene';
 
 /* ─────────────────────────────────────────────────────────
-   Animated canvas: dense particles + connecting lines
+   Stable hover card (replaced tilt for stable UI)
 ───────────────────────────────────────────────────────── */
-function ParticleField() {
-  const ref = useRef(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let raf;
-    let W = (canvas.width  = window.innerWidth);
-    let H = (canvas.height = window.innerHeight);
-    const COLORS = ['rgba(0,212,255,', 'rgba(168,85,247,', 'rgba(16,185,129,', 'rgba(6,182,212,'];
-    const pts = Array.from({ length: 110 }, () => ({
-      x:   Math.random() * W,
-      y:   Math.random() * H,
-      r:   Math.random() * 1.6 + 0.2,
-      dx:  (Math.random() - 0.5) * 0.3,
-      dy:  (Math.random() - 0.5) * 0.3,
-      a:   Math.random() * 0.6 + 0.1,
-      col: COLORS[Math.floor(Math.random() * COLORS.length)],
-    }));
-    function tick() {
-      ctx.clearRect(0, 0, W, H);
-      for (let i = 0; i < pts.length; i++) {
-        for (let j = i + 1; j < pts.length; j++) {
-          const dx = pts[i].x - pts[j].x;
-          const dy = pts[i].y - pts[j].y;
-          const d  = Math.hypot(dx, dy);
-          if (d < 140) {
-            ctx.beginPath();
-            ctx.moveTo(pts[i].x, pts[i].y);
-            ctx.lineTo(pts[j].x, pts[j].y);
-            ctx.strokeStyle = `rgba(0,212,255,${(1 - d / 140) * 0.12})`;
-            ctx.lineWidth   = 0.7;
-            ctx.stroke();
-          }
-        }
-      }
-      for (const p of pts) {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `${p.col}${p.a})`;
-        ctx.fill();
-        p.x += p.dx; p.y += p.dy;
-        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
-        if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-      }
-      raf = requestAnimationFrame(tick);
-    }
-    tick();
-    const onResize = () => { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; };
-    window.addEventListener('resize', onResize);
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', onResize); };
-  }, []);
-  return <canvas ref={ref} className="fixed inset-0 pointer-events-none" style={{ zIndex: 0, opacity: 0.7 }} />;
-}
-
-/* ─────────────────────────────────────────────────────────
-   3D-tilt card wrapper (mouse parallax)
-───────────────────────────────────────────────────────── */
-function TiltCard({ children, className = '', style = {} }) {
-  const ref    = useRef(null);
-  const onMove = useCallback((e) => {
-    const el = ref.current; if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width  - 0.5) * 2;
-    const y = ((e.clientY - rect.top)  / rect.height - 0.5) * 2;
-    el.style.transform = `perspective(900px) rotateY(${x * 6}deg) rotateX(${-y * 5}deg) scale3d(1.02,1.02,1.02)`;
-  }, []);
-  const onLeave = useCallback(() => {
-    if (ref.current) ref.current.style.transform = 'perspective(900px) rotateY(0deg) rotateX(0deg) scale3d(1,1,1)';
-  }, []);
+function HoverCard({ children, className = '', style = {} }) {
   return (
-    <div ref={ref} className={className}
-      style={{ transition:'transform 0.15s ease', transformStyle:'preserve-3d', willChange:'transform', ...style }}
-      onMouseMove={onMove} onMouseLeave={onLeave}>
+    <motion.div
+      className={className}
+      style={{ ...style }}
+      whileHover={{ 
+        y: -4, 
+        boxShadow: '0 20px 40px rgba(0,0,0,0.4), 0 0 30px rgba(0, 212, 255, 0.15)' 
+      }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+    >
       {children}
-    </div>
+    </motion.div>
   );
 }
 
@@ -182,16 +120,18 @@ function AnimatedStat({ value, label, color, delay = 0 }) {
    Main page
 ───────────────────────────────────────────────────────── */
 export default function SubmitPage() {
+  const [isScanning, setIsScanning] = useState(false);
+
   return (
-    <div className="min-h-screen relative overflow-hidden aurora-bg">
-      <ParticleField />
+    <div className="min-h-screen relative overflow-hidden bg-slate-900">
+      <CyberScene isScanning={isScanning} />
 
       {/* Floating orbs (depth layers) */}
       <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }}>
         <FloatingOrb color="#00d4ff" size="700px" top="-15%"  left="-10%"  blur={200} opacity={0.13} />
-        <FloatingOrb color="#a855f7" size="600px" top="20%"   right="-15%" blur={200} opacity={0.10} />
-        <FloatingOrb color="#10b981" size="400px" bottom="-10%" left="30%" blur={160} opacity={0.08} />
-        <FloatingOrb color="#00d4ff" size="300px" top="60%"   right="10%"  blur={120} opacity={0.07} />
+        <FloatingOrb color="#7c3aed" size="600px" top="20%"   right="-15%" blur={200} opacity={0.10} />
+        <FloatingOrb color="#00d4ff" size="400px" bottom="-10%" left="30%" blur={160} opacity={0.08} />
+        <FloatingOrb color="#7c3aed" size="300px" top="60%"   right="10%"  blur={120} opacity={0.07} />
       </div>
 
       {/* Decorative grid overlay */}
@@ -208,7 +148,7 @@ export default function SubmitPage() {
           <div className="absolute left-1/2 -translate-x-1/2 -translate-y-8 pointer-events-none" style={{ zIndex: 0 }}>
             <div className="relative w-72 h-72 flex items-center justify-center">
               <RingDecor size={280} color="#00d4ff" speed="spin-ring-slow"    dash="10 8"  opacity={0.13} />
-              <RingDecor size={220} color="#a855f7" speed="spin-ring-reverse" dash="6 10"  opacity={0.10} />
+              <RingDecor size={220} color="#7c3aed" speed="spin-ring-reverse" dash="6 10"  opacity={0.10} />
               <RingDecor size={160} color="#00d4ff" speed="spin-ring"         dash="4 12"  opacity={0.08} />
               <div className="absolute w-20 h-20 rounded-full"
                 style={{ background: 'radial-gradient(circle, rgba(0,212,255,0.25) 0%, transparent 70%)', filter: 'blur(20px)' }} />
@@ -288,10 +228,10 @@ export default function SubmitPage() {
             accentColor="#00d4ff" delay={0.44} />
           <FeatureChip icon="📦" label="Trivy SCA"
             description="Deep dependency & container image vulnerability scanning"
-            accentColor="#a855f7" delay={0.54} />
+            accentColor="#7c3aed" delay={0.54} />
           <FeatureChip icon="📊" label="Security Score"
             description="Composite A–F grade with per-tool breakdown and remediation guidance"
-            accentColor="#10b981" delay={0.64} />
+            accentColor="#00d4ff" delay={0.64} />
         </div>
 
         {/* ═══════════════════ GLASS SUBMIT CARD ═══════════════════ */}
@@ -302,17 +242,14 @@ export default function SubmitPage() {
           transition={{ duration: 0.65, delay: 0.56, ease: [0.22, 1, 0.36, 1] }}
           className="mx-auto max-w-xl"
         >
-          <TiltCard
+          <HoverCard
             className="rounded-3xl holo-shimmer border-animated"
             style={{
-              background:          'rgba(6, 11, 26, 0.82)',
-              border:              '1px solid rgba(0,212,255,0.18)',
+              background:          'rgba(255, 255, 255, 0.05)',
+              border:              '1px solid rgba(255, 255, 255, 0.1)',
               backdropFilter:      'blur(28px)',
               WebkitBackdropFilter:'blur(28px)',
-              boxShadow:
-                '0 0 80px rgba(0,212,255,0.09), ' +
-                '0 40px 80px rgba(0,0,0,0.6), ' +
-                'inset 0 1px 0 rgba(255,255,255,0.06)',
+              boxShadow:           '0 10px 30px rgba(0,0,0,0.3)',
               padding: '2rem',
             }}
           >
@@ -323,7 +260,7 @@ export default function SubmitPage() {
             {/* Header */}
             <div className="flex items-center gap-4 mb-7">
               <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl text-xl"
-                style={{ background: 'linear-gradient(135deg, #0055bb, #00d4ff)', boxShadow: '0 0 25px rgba(0,212,255,0.5), inset 0 1px 0 rgba(255,255,255,0.2)' }}>
+                style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(0,212,255,0.2))', border: '1px solid rgba(0,212,255,0.3)', boxShadow: '0 0 20px rgba(0,212,255,0.2), inset 0 1px 0 rgba(255,255,255,0.1)' }}>
                 🛡
                 <div className="absolute inset-0 rounded-2xl spin-ring"
                   style={{ border: '1px dashed rgba(0,212,255,0.4)', scale: '1.3' }} />
@@ -343,7 +280,7 @@ export default function SubmitPage() {
             {/* Divider */}
             <div className="mb-7" style={{ height: '1px', background: 'linear-gradient(90deg, transparent, rgba(0,212,255,0.15), transparent)' }} />
 
-            <RepoSubmitForm />
+            <RepoSubmitForm onScanningChange={setIsScanning} />
 
             {/* Footer */}
             <div className="mt-6 flex items-center justify-center gap-2">
@@ -357,14 +294,14 @@ export default function SubmitPage() {
               </Link>
               <div className="flex-1 h-px" style={{ background: 'linear-gradient(270deg, transparent, rgba(0,212,255,0.08))' }} />
             </div>
-          </TiltCard>
+          </HoverCard>
         </motion.div>
 
         {/* ═══════════════════ STATS ROW ═══════════════════ */}
         <div className="mt-16 grid grid-cols-3 gap-6">
           <AnimatedStat value="100%" label="Open Source" color="#00d4ff" delay={0.68} />
-          <AnimatedStat value="<2m"  label="Scan Time"   color="#a855f7" delay={0.76} />
-          <AnimatedStat value="2x"   label="Tools Used"  color="#10b981" delay={0.84} />
+          <AnimatedStat value="<2m"  label="Scan Time"   color="#7c3aed" delay={0.76} />
+          <AnimatedStat value="2x"   label="Tools Used"  color="#00d4ff" delay={0.84} />
         </div>
 
       </main>

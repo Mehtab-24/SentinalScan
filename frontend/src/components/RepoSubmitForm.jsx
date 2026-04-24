@@ -7,7 +7,7 @@ import Spinner from './Spinner';
 /**
  * RepoSubmitForm — neon glass form with shake-on-error and typing glow.
  */
-export default function RepoSubmitForm() {
+export default function RepoSubmitForm({ onScanningChange }) {
   const [repoUrl, setRepoUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
@@ -18,6 +18,7 @@ export default function RepoSubmitForm() {
     e.preventDefault();
     setError('');
     setLoading(true);
+    if (onScanningChange) onScanningChange(true);
     try {
       const scan = await submitScan(repoUrl);
       navigate(`/scans/${scan.id}`);
@@ -27,6 +28,7 @@ export default function RepoSubmitForm() {
       setShakeKey(k => k + 1); // trigger shake re-mount
     } finally {
       setLoading(false);
+      if (onScanningChange) onScanningChange(false);
     }
   }
 
