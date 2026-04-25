@@ -58,8 +58,7 @@ public class ScanOrchestrator {
             // ── Step 3 ─ Git shallow clone ────────────────────────────────────
             ProcessResult cloneResult = processRunner.run(
                     List.of("git", "clone", "--depth", "1", job.getRepoUrl(), repoPath),
-                    3
-            );
+                    3);
             if (cloneResult.exitCode() != 0) {
                 throw new RuntimeException("git clone failed (exit " + cloneResult.exitCode() + "): "
                         + cloneResult.output().lines().findFirst().orElse("no output"));
@@ -69,9 +68,13 @@ public class ScanOrchestrator {
             // Exit code 0 = no findings, 1 = findings found — both are valid.
             // Exit code 2+ = actual error.
             ProcessResult semgrepResult = processRunner.run(
-                    List.of("semgrep", "scan", "--json", "--config", "auto", repoPath),
-                    3
-            );
+                    List.of(
+                            "C:\\Users\\Mehtab Singh\\AppData\\Roaming\\Python\\Python310\\Scripts\\semgrep.exe",
+                            "scan",
+                            "--json",
+                            "--config", "auto",
+                            repoPath),
+                    3);
             String semgrepJson = semgrepResult.output().isBlank() ? "{\"results\":[]}" : semgrepResult.output();
             if (semgrepResult.exitCode() > 1) {
                 log.warn("Semgrep exited with code {} — treating findings as empty", semgrepResult.exitCode());
@@ -81,8 +84,7 @@ public class ScanOrchestrator {
             // ── Step 5 ─ Trivy ────────────────────────────────────────────────
             ProcessResult trivyResult = processRunner.run(
                     List.of("trivy", "fs", "--format", "json", "--no-progress", repoPath),
-                    3
-            );
+                    3);
             String trivyJson = trivyResult.output().isBlank() ? "{\"Results\":[]}" : trivyResult.output();
             if (trivyResult.exitCode() != 0) {
                 log.warn("Trivy exited with code {} — treating findings as empty", trivyResult.exitCode());
@@ -91,7 +93,7 @@ public class ScanOrchestrator {
 
             // ── Step 6 ─ Parse ────────────────────────────────────────────────
             FindingCounts semgrepCounts = semgrepParser.parse(semgrepJson);
-            FindingCounts trivyCounts   = trivyParser.parse(trivyJson);
+            FindingCounts trivyCounts = trivyParser.parse(trivyJson);
 
             // ── Step 7 ─ Score ────────────────────────────────────────────────
             int semgrepScore = scoreCalculator.calculate(
