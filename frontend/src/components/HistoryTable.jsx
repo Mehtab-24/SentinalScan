@@ -95,7 +95,7 @@ export default function HistoryTable({ scans = [] }) {
                       <p className="font-semibold text-slate-200 truncate">
                         {scan.repoName ?? scan.repoUrl ?? `Scan #${scan.id}`}
                       </p>
-                      <p className="text-xs mt-0.5" style={{ color: 'rgba(0,212,255,0.35)' }}>#{scan.id}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'rgba(0,212,255,0.35)' }}>#{String(scan.id).slice(0, 8)}…</p>
                     </div>
                   </div>
                 </td>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getScan } from '../api/scanApi';
+import { getScan, submitScan } from '../api/scanApi';
 import Navbar from '../components/Navbar';
 import StatusBadge from '../components/StatusBadge';
 import ScoreCard from '../components/ScoreCard';
@@ -12,6 +12,26 @@ const TERMINAL_STATUSES = ['COMPLETED', 'FAILED'];
 const ACTIVE_STATUSES   = ['PENDING', 'RUNNING', 'IN_PROGRESS'];
 const POLL_INTERVAL_MS  = 4000;
 
+/** Compute letter grade from numeric score */
+function computeGrade(score) {
+  if (score == null) return null;
+  if (score >= 90) return 'A';
+  if (score >= 75) return 'B';
+  if (score >= 60) return 'C';
+  if (score >= 40) return 'D';
+  return 'F';
+}
+
+/** Format milliseconds to human-readable duration */
+function formatDuration(ms) {
+  if (!ms) return null;
+  const secs = Math.round(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}m ${s}s`;
+}
+
 /* Terminal log lines that animate in sequence */
 const TERMINAL_LINES = [
   { text: '> Initializing scan environment...', color: '#00d4ff', delay: 0 },
@@ -20,10 +40,11 @@ const TERMINAL_LINES = [
   { text: '  → Scanning for security vulnerabilities', color: '#64748b', delay: 1.3 },
   { text: '  → Checking code quality patterns', color: '#64748b', delay: 1.7 },
   { text: '> Running Trivy dependency scan...', color: '#a855f7', delay: 2.2 },
-  { text: '  → Scanning CVE database...', color: '#64748b', delay: 2.6 },
-  { text: '  → Checking SBOM for vulnerabilities', color: '#64748b', delay: 3.1 },
-  { text: '> Calculating composite security score...', color: '#10b981', delay: 3.6 },
-  { text: '> Awaiting results...', color: '#fbbf24', delay: 4.0, blink: true },
+  { text: '  ⓘ  First run? Trivy may download its CVE DB (~500MB) — this adds ~3 min', color: '#fbbf2488', delay: 2.5 },
+  { text: '  → Scanning CVE database...', color: '#64748b', delay: 3.0 },
+  { text: '  → Checking SBOM for vulnerabilities', color: '#64748b', delay: 3.5 },
+  { text: '> Calculating composite security score...', color: '#10b981', delay: 4.0 },
+  { text: '> Awaiting results...', color: '#fbbf24', delay: 4.5, blink: true },
 ];
 
 /* ── 3D tilt card ── */
@@ -114,24 +135,43 @@ function TerminalLine({ text, color, blink = false }) {
   );
 }
 
+/* ── Time-based phase constants ── */
+const PHASE_DB_DOWNLOAD = 10;   // seconds — show Trivy DB warning
+const PHASE_STILL_WORKING = 30; // seconds — "still analysing" message
+const PHASE_TIMEOUT_WARN = 180; // seconds — 3 min timeout warning
+
 /* ── Active Scanning — Terminal UI ── */
-function TerminalScanUI({ scanId }) {
+function TerminalScanUI({ scanId, onRetry }) {
   const [visibleLines, setVisibleLines] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [elapsed, setElapsed] = useState(0); // seconds since mount
 
   useEffect(() => {
     const timers = TERMINAL_LINES.map((line, i) =>
       setTimeout(() => setVisibleLines(v => Math.max(v, i + 1)), line.delay * 1000)
     );
-    // Animate progress bar
+    // Animate progress bar — slows after 60s to avoid overshooting
     const progressTimer = setInterval(() => {
       setProgress(p => {
-        if (p >= 85) { clearInterval(progressTimer); return 85; }
-        return p + Math.random() * 2.5;
+        const cap = elapsed > 60 ? 72 : 85;
+        if (p >= cap) return cap;
+        return p + Math.random() * (elapsed > 30 ? 0.6 : 2.5);
       });
     }, 300);
-    return () => { timers.forEach(clearTimeout); clearInterval(progressTimer); };
-  }, []);
+    // Wall-clock elapsed seconds counter
+    const elapsedTimer = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => { timers.forEach(clearTimeout); clearInterval(progressTimer); clearInterval(elapsedTimer); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Derive phase from elapsed time
+  const isDbDownload   = elapsed >= PHASE_DB_DOWNLOAD && elapsed < PHASE_STILL_WORKING;
+  const isStillWorking = elapsed >= PHASE_STILL_WORKING && elapsed < PHASE_TIMEOUT_WARN;
+  const isTimeoutWarn  = elapsed >= PHASE_TIMEOUT_WARN;
+
+  // Format elapsed as m:ss
+  const elapsedLabel = elapsed < 60
+    ? `${elapsed}s`
+    : `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`;
 
   return (
     <motion.div
@@ -152,7 +192,9 @@ function TerminalScanUI({ scanId }) {
             </p>
             <p className="text-xs text-slate-500 font-mono mt-0.5">SCAN_ID · {scanId}</p>
           </div>
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-3">
+            {/* Elapsed timer */}
+            <span className="text-xs font-mono tabular-nums" style={{ color: 'rgba(0,212,255,0.4)' }}>{elapsedLabel}</span>
             <span className="h-2 w-2 rounded-full animate-pulse" style={{ background: '#00d4ff', boxShadow: '0 0 8px #00d4ff' }} />
             <span className="text-xs font-bold" style={{ color: 'rgba(0,212,255,0.6)' }}>LIVE</span>
           </div>
@@ -172,6 +214,67 @@ function TerminalScanUI({ scanId }) {
           </AnimatePresence>
         </div>
 
+        {/* ── Time-based status banners ── */}
+        <AnimatePresence mode="wait">
+          {isTimeoutWarn && (
+            <motion.div key="timeout"
+              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.35 }}
+              className="mx-7 mb-4 rounded-xl px-4 py-3 flex items-start gap-3"
+              style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)' }}
+            >
+              <span className="shrink-0 mt-0.5 text-sm">⚠</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-black" style={{ color: '#f87171' }}>
+                  Scan taking longer than expected ({elapsedLabel})
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  The process may be stuck or waiting for the Trivy CVE DB (~500 MB). You can retry.
+                </p>
+              </div>
+              <button
+                onClick={onRetry}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black transition-all duration-200"
+                style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
+              >
+                ↺ Retry
+              </button>
+            </motion.div>
+          )}
+          {isStillWorking && !isTimeoutWarn && (
+            <motion.div key="still"
+              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.35 }}
+              className="mx-7 mb-4 rounded-xl px-4 py-3 flex items-center gap-3"
+              style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.18)' }}
+            >
+              <Spinner size="h-3.5 w-3.5" color="text-yellow-400" />
+              <div>
+                <p className="text-xs font-black" style={{ color: '#fbbf24' }}>
+                  Still working… analysing dependencies ({elapsedLabel})
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">Trivy is scanning the dependency graph — hang tight.</p>
+              </div>
+            </motion.div>
+          )}
+          {isDbDownload && !isStillWorking && !isTimeoutWarn && (
+            <motion.div key="db"
+              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.35 }}
+              className="mx-7 mb-4 rounded-xl px-4 py-3 flex items-center gap-3"
+              style={{ background: 'rgba(168,85,247,0.07)', border: '1px solid rgba(168,85,247,0.22)' }}
+            >
+              <Spinner size="h-3.5 w-3.5" color="text-purple-400" />
+              <div>
+                <p className="text-xs font-black" style={{ color: '#a855f7' }}>
+                  Downloading vulnerability database (first run)
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">Trivy CVE DB is ~500 MB — this may take a few minutes.</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Progress bar */}
         <div className="px-7 pb-6">
           <div className="flex justify-between items-center mb-2">
@@ -187,10 +290,153 @@ function TerminalScanUI({ scanId }) {
               transition={{ duration: 0.5, ease: 'easeOut' }}
             />
           </div>
-          <p className="text-xs text-slate-600 mt-2 text-center">Auto-refreshing every 4s · Up to 1–2 minutes total</p>
+          <p className="text-xs text-slate-600 mt-2 text-center">Auto-refreshing every 4s · Trivy first-run may take up to 5 min</p>
         </div>
       </GlassPanel>
     </motion.div>
+  );
+}
+
+/* ── Severity colours helper ── */
+const SEVERITY_STYLES = {
+  CRITICAL: { color: '#f87171', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.3)',  label: 'CRIT' },
+  HIGH:     { color: '#fb923c', bg: 'rgba(251,146,60,0.12)', border: 'rgba(251,146,60,0.3)', label: 'HIGH' },
+  MEDIUM:   { color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.3)', label: 'MED'  },
+  LOW:      { color: '#34d399', bg: 'rgba(52,211,153,0.10)', border: 'rgba(52,211,153,0.3)', label: 'LOW'  },
+  INFO:     { color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', border: 'rgba(148,163,184,0.2)', label: 'INFO' },
+};
+const SEVERITY_ORDER = ['CRITICAL','HIGH','MEDIUM','LOW','INFO'];
+
+/** Truncate a file path to last 2 segments */
+function shortPath(p) {
+  if (!p) return '';
+  const parts = p.replace(/\\/g, '/').split('/');
+  return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p;
+}
+
+/* ── Findings Preview Panel ── */
+function FindingsPanel({ semgrepFindings, trivyFindings }) {
+  const [open, setOpen] = useState(false);
+
+  // Parse and normalise findings from both tools
+  const findings = (() => {
+    const list = [];
+    // Semgrep findings
+    try {
+      const sg = typeof semgrepFindings === 'string' ? JSON.parse(semgrepFindings) : semgrepFindings;
+      const results = sg?.results ?? [];
+      results.forEach((r) => {
+        list.push({
+          tool: 'Semgrep',
+          severity: (r.extra?.severity ?? r.severity ?? 'LOW').toUpperCase(),
+          rule: r.check_id ?? r.rule_id ?? 'unknown',
+          path: r.path ?? '',
+          message: r.extra?.message ?? r.message ?? '',
+        });
+      });
+    } catch (_) { /* ignore parse errors */ }
+    // Trivy findings
+    try {
+      const tv = typeof trivyFindings === 'string' ? JSON.parse(trivyFindings) : trivyFindings;
+      const resultSets = tv?.Results ?? [];
+      resultSets.forEach((rs) => {
+        (rs.Vulnerabilities ?? []).forEach((v) => {
+          list.push({
+            tool: 'Trivy',
+            severity: (v.Severity ?? 'LOW').toUpperCase(),
+            rule: v.VulnerabilityID ?? 'CVE-???',
+            path: rs.Target ?? '',
+            message: v.Title ?? v.Description ?? '',
+          });
+        });
+      });
+    } catch (_) { /* ignore parse errors */ }
+    // Sort by severity order
+    list.sort((a, b) => {
+      const ai = SEVERITY_ORDER.indexOf(a.severity);
+      const bi = SEVERITY_ORDER.indexOf(b.severity);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+    return list.slice(0, 5);
+  })();
+
+  if (findings.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl overflow-hidden"
+      style={{ background: 'rgba(5,10,24,0.82)', border: '1px solid rgba(0,212,255,0.10)', backdropFilter: 'blur(20px)' }}>
+      {/* Toggle header */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-5 py-4 text-left"
+        style={{ cursor: 'pointer', background: 'transparent', border: 'none' }}
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg text-sm"
+            style={{ background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#a855f7' }}>⚑</span>
+          <div>
+            <p className="text-sm font-black text-slate-200">Top Findings Preview</p>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(0,212,255,0.35)' }}>Showing top {findings.length} of all issues found</p>
+          </div>
+        </div>
+        <motion.span
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={{ duration: 0.25 }}
+          className="text-slate-500 text-lg select-none"
+        >⌄</motion.span>
+      </button>
+
+      {/* Collapsible findings list */}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="px-5 pb-5 space-y-2"
+              style={{ borderTop: '1px solid rgba(0,212,255,0.07)' }}>
+              <p className="text-xs font-bold tracking-widest uppercase pt-4 mb-3"
+                style={{ color: 'rgba(0,212,255,0.35)' }}>Results</p>
+              {findings.map((f, i) => {
+                const sty = SEVERITY_STYLES[f.severity] ?? SEVERITY_STYLES.INFO;
+                return (
+                  <div key={i}
+                    className="rounded-xl px-4 py-3 flex items-start gap-3"
+                    style={{ background: 'rgba(0,0,0,0.25)', border: `1px solid rgba(255,255,255,0.04)` }}>
+                    {/* Severity badge */}
+                    <span className="shrink-0 mt-0.5 rounded-md px-2 py-0.5 text-xs font-black tabular-nums"
+                      style={{ background: sty.bg, border: `1px solid ${sty.border}`, color: sty.color, minWidth: 42, textAlign: 'center' }}>
+                      {sty.label}
+                    </span>
+                    {/* Content */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs font-black text-slate-200 truncate">{f.rule}</span>
+                        <span className="shrink-0 text-xs rounded px-1.5 py-0.5 font-mono"
+                          style={{ background: 'rgba(255,255,255,0.04)', color: f.tool === 'Semgrep' ? '#00d4ff' : '#a855f7', fontSize: 10 }}>
+                          {f.tool}
+                        </span>
+                      </div>
+                      {f.path && (
+                        <p className="text-xs font-mono truncate" style={{ color: 'rgba(148,163,184,0.6)' }}>
+                          {shortPath(f.path)}
+                        </p>
+                      )}
+                      {f.message && (
+                        <p className="text-xs text-slate-500 mt-0.5 leading-relaxed line-clamp-2">{f.message}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -214,6 +460,7 @@ export default function ScanResultPage() {
   const [scan, setScan]             = useState(null);
   const [fetchError, setFetchError] = useState('');
   const [retrying, setRetrying]     = useState(false);
+  const [rescanning, setRescanning] = useState(false);
   const intervalRef                 = useRef(null);
 
   const startPolling = useCallback(() => {
@@ -241,6 +488,20 @@ export default function ScanResultPage() {
     setTimeout(() => { setRetrying(false); startPolling(); }, 600);
   }
   function handleRetryScan() { navigate('/'); }
+
+  async function handleRescan() {
+    if (!scan?.repoUrl || rescanning) return;
+    setRescanning(true);
+    try {
+      const newScan = await submitScan(scan.repoUrl);
+      navigate(`/scans/${newScan.id}`);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Rescan failed', err);
+    } finally {
+      setRescanning(false);
+    }
+  }
 
   const isActive   = scan && ACTIVE_STATUSES.includes(scan.status);
   const isComplete = scan?.status === 'COMPLETED';
@@ -325,10 +586,46 @@ export default function ScanResultPage() {
                         <h1 className="text-base font-black text-slate-100 truncate">
                           {scan.repoName ?? scan.repoUrl ?? `Scan #${id}`}
                         </h1>
-                        <p className="text-xs mt-0.5 font-mono" style={{ color: 'rgba(0,212,255,0.35)' }}>ID · {id}</p>
+                        <p className="text-xs mt-0.5 font-mono" style={{ color: 'rgba(0,212,255,0.35)' }}>ID · {String(id).slice(0,8)}…</p>
                       </div>
                     </div>
-                    <StatusBadge status={scan.status} />
+                    <div className="flex flex-col items-end gap-2">
+                      <StatusBadge status={scan.status} />
+                      {scan.durationMs && (
+                        <span className="text-xs font-mono" style={{ color: 'rgba(0,212,255,0.35)' }}>⏱ {formatDuration(scan.durationMs)}</span>
+                      )}
+                      {/* Rescan button — primary CTA on completed scans */}
+                      {isComplete && (
+                        <motion.button
+                          id="rescan-btn"
+                          onClick={handleRescan}
+                          disabled={rescanning}
+                          whileHover={!rescanning ? { scale: 1.05, y: -2 } : {}}
+                          whileTap={!rescanning ? { scale: 0.96 } : {}}
+                          transition={{ type: 'spring', stiffness: 350, damping: 20 }}
+                          className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-black tracking-wide text-white disabled:cursor-not-allowed disabled:opacity-60 transition-all duration-200"
+                          style={{
+                            background: rescanning
+                              ? 'linear-gradient(135deg,#0369a1,#0e7490)'
+                              : 'linear-gradient(135deg,#06b6d4,#3b82f6)',
+                            boxShadow: rescanning
+                              ? 'none'
+                              : '0 0 18px rgba(6,182,212,0.55), 0 0 6px rgba(59,130,246,0.35)',
+                            border: '1px solid rgba(6,182,212,0.45)',
+                          }}
+                        >
+                          {rescanning ? (
+                            <Spinner size="h-3.5 w-3.5" color="text-white" />
+                          ) : (
+                            /* Refresh SVG icon */
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 shrink-0">
+                              <path fillRule="evenodd" d="M15.312 3.313a.75.75 0 0 1 .938 1.168A7.5 7.5 0 1 1 3.25 10a.75.75 0 0 1 1.5 0 6 6 0 1 0 10.563-3.937.75.75 0 0 1-.001-1.75Zm-5.5-.063a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75h-3.5a.75.75 0 0 1 0-1.5h2.75V4a.75.75 0 0 1 .75-.75Z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                          {rescanning ? 'Starting new scan…' : 'Rescan Repository'}
+                        </motion.button>
+                      )}
+                    </div>
                   </div>
                   {/* Status banner */}
                   <div className="px-7 py-3.5 flex items-center gap-3 text-sm font-semibold"
@@ -361,7 +658,7 @@ export default function ScanResultPage() {
 
             {/* ── Scanning in progress — Terminal UI ── */}
             <AnimatePresence>
-              {isActive && <TerminalScanUI scanId={id} />}
+              {isActive && <TerminalScanUI scanId={id} onRetry={handleRetryScan} />}
             </AnimatePresence>
 
             {/* ── Completed ── 3-card grid ── */}
@@ -402,11 +699,75 @@ export default function ScanResultPage() {
                     </TiltCard>
                   </motion.div>
 
+                  {/* Severity breakdown grid */}
+                  <motion.div variants={cardVariants}>
+                    <div className="rounded-2xl overflow-hidden"
+                      style={{ background: 'rgba(5,10,24,0.82)', border: '1px solid rgba(0,212,255,0.10)', backdropFilter: 'blur(20px)' }}>
+                      <div className="absolute top-0 left-8 right-8 h-px"
+                        style={{ background: 'linear-gradient(90deg, transparent, rgba(168,85,247,0.4), transparent)' }} />
+                      <div className="px-5 pt-5 pb-4">
+                        <p className="text-xs font-bold tracking-widest uppercase mb-4" style={{ color: 'rgba(0,212,255,0.5)' }}>Severity Breakdown</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Semgrep */}
+                          <div className="rounded-xl p-4" style={{ background: 'rgba(0,212,255,0.04)', border: '1px solid rgba(0,212,255,0.12)' }}>
+                            <p className="text-xs font-bold mb-3" style={{ color: '#00d4ff' }}>🔬 Semgrep SAST</p>
+                            <div className="space-y-2">
+                              {[
+                                { label: 'Critical', val: scan.semgrepCritical ?? 0, color: '#f87171' },
+                                { label: 'High',     val: scan.semgrepHigh     ?? 0, color: '#fb923c' },
+                                { label: 'Medium',   val: scan.semgrepMedium   ?? 0, color: '#fbbf24' },
+                                { label: 'Low',      val: scan.semgrepLow      ?? 0, color: '#34d399' },
+                              ].map(({ label, val, color }) => (
+                                <div key={label} className="flex items-center justify-between">
+                                  <span className="text-xs text-slate-500">{label}</span>
+                                  <span className="text-sm font-black tabular-nums"
+                                    style={{ color: val > 0 ? color : '#334155', textShadow: val > 0 ? `0 0 8px ${color}70` : 'none' }}>
+                                    {val}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          {/* Trivy */}
+                          <div className="rounded-xl p-4" style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.12)' }}>
+                            <p className="text-xs font-bold mb-3" style={{ color: '#a855f7' }}>📦 Trivy SCA</p>
+                            <div className="space-y-2">
+                              {[
+                                { label: 'Critical', val: scan.trivyCritical ?? 0, color: '#f87171' },
+                                { label: 'High',     val: scan.trivyHigh     ?? 0, color: '#fb923c' },
+                                { label: 'Medium',   val: scan.trivyMedium   ?? 0, color: '#fbbf24' },
+                                { label: 'Low',      val: scan.trivyLow      ?? 0, color: '#34d399' },
+                              ].map(({ label, val, color }) => (
+                                <div key={label} className="flex items-center justify-between">
+                                  <span className="text-xs text-slate-500">{label}</span>
+                                  <span className="text-sm font-black tabular-nums"
+                                    style={{ color: val > 0 ? color : '#334155', textShadow: val > 0 ? `0 0 8px ${color}70` : 'none' }}>
+                                    {val}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+
                   <motion.div variants={cardVariants}>
                     <TiltCard>
-                      <ScoreCard score={scan.overallScore ?? scan.score} grade={scan.grade} summary={scan.summary} />
+                      <ScoreCard score={scan.overallScore ?? scan.score} grade={computeGrade(scan.overallScore ?? scan.score)} summary={scan.summary} />
                     </TiltCard>
                   </motion.div>
+
+                  {/* Findings preview panel — only shown when findings are present */}
+                  {(scan.semgrepFindings || scan.trivyFindings) && (
+                    <motion.div variants={cardVariants}>
+                      <FindingsPanel
+                        semgrepFindings={scan.semgrepFindings}
+                        trivyFindings={scan.trivyFindings}
+                      />
+                    </motion.div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -425,11 +786,30 @@ export default function ScanResultPage() {
                           <p className="text-xs text-slate-600 mt-0.5">The scan could not be completed</p>
                         </div>
                       </div>
-                      <div className="px-6 py-4">
-                        <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: 'rgba(239,68,68,0.5)' }}>Error Details</p>
-                        <div className="rounded-xl px-4 py-3 font-mono text-sm text-red-300 leading-relaxed"
-                          style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.12)' }}>
-                          {scan.errorMessage ?? 'An unknown error occurred during the scan.'}
+                      <div className="px-6 py-4 space-y-4">
+                        <div>
+                          <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: 'rgba(239,68,68,0.5)' }}>Error Details</p>
+                          <div className="rounded-xl px-4 py-3 font-mono text-sm text-red-300 leading-relaxed"
+                            style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.12)' }}>
+                            {scan.errorMessage ?? 'An unknown error occurred during the scan.'}
+                          </div>
+                        </div>
+                        <div className="rounded-xl px-4 py-3"
+                          style={{ background: 'rgba(251,191,36,0.04)', border: '1px solid rgba(251,191,36,0.12)' }}>
+                          <p className="text-xs font-bold mb-2" style={{ color: 'rgba(251,191,36,0.7)' }}>⚠ Common Causes</p>
+                          <ul className="space-y-1">
+                            {[
+                              'Semgrep or Trivy is not installed / not on PATH',
+                              'Repository is private or URL is invalid',
+                              'Network timeout during git clone or CVE DB download',
+                              'First-time Trivy run — CVE database download (~500 MB) may time out',
+                            ].map((hint) => (
+                              <li key={hint} className="flex items-start gap-2 text-xs text-slate-500">
+                                <span className="shrink-0 mt-0.5" style={{ color: 'rgba(251,191,36,0.5)' }}>·</span>
+                                {hint}
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       </div>
                       <div className="px-6 pb-5">

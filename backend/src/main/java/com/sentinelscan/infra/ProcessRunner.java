@@ -5,7 +5,6 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -29,6 +28,8 @@ public class ProcessRunner {
         log.info("Executing: {}", String.join(" ", command));
 
         ProcessBuilder pb = new ProcessBuilder(command);
+        // Inherit the full system PATH so git/trivy/semgrep are resolvable
+        pb.environment().putAll(System.getenv());
         // Required for Semgrep to locate its config directory
         pb.environment().put("HOME", System.getProperty("user.home"));
         // Prevent Semgrep from emitting ANSI color codes
@@ -36,13 +37,13 @@ public class ProcessRunner {
 
         Process process = pb.start();
 
-        // Drain stderr in background to prevent the process from blocking on a full
-        // pipe
-        CompletableFuture<Void> stderrDrain = CompletableFuture.runAsync(() -> {
+        // Capture stderr in background (previously discarded — caused exit 128 to be silent)
+        CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() -> {
             try (InputStream err = process.getErrorStream()) {
-                err.transferTo(OutputStream.nullOutputStream());
+                return new String(err.readAllBytes(), StandardCharsets.UTF_8);
             } catch (IOException e) {
-                log.debug("Stderr drain interrupted for: {}", command.get(0));
+                log.debug("Stderr read interrupted for: {}", command.get(0));
+                return "";
             }
         });
 
@@ -51,7 +52,7 @@ public class ProcessRunner {
 
         // Wait for process with timeout
         boolean completed = process.waitFor(timeoutMinutes, TimeUnit.MINUTES);
-        stderrDrain.join();
+        String stderr = stderrFuture.join();
 
         if (!completed) {
             process.destroyForcibly();
@@ -61,6 +62,9 @@ public class ProcessRunner {
 
         int exitCode = process.exitValue();
         log.info("Process [{}] exited with code {}", command.get(0), exitCode);
-        return new ProcessResult(exitCode, output);
+        if (!stderr.isBlank()) {
+            log.debug("Process [{}] stderr: {}", command.get(0), stderr.strip());
+        }
+        return new ProcessResult(exitCode, output, stderr);
     }
 }

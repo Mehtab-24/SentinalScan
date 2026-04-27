@@ -5,5 +5,6 @@ package com.sentinelscan.infra;
  *
  * @param exitCode process exit code (0 = success for most tools; Semgrep uses 1 for findings)
  * @param output   combined stdout content
+ * @param stderr   combined stderr content (empty string if nothing written)
  */
-public record ProcessResult(int exitCode, String output) {}
+public record ProcessResult(int exitCode, String output, String stderr) {}
