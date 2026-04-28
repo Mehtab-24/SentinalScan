@@ -41,6 +41,7 @@ public class ScanOrchestrator {
     private final SemgrepParser semgrepParser;
     private final TrivyParser trivyParser;
     private final ScoreCalculator scoreCalculator;
+    private final GitCloneService gitCloneService;
 
     /**
      * Runs the full scan pipeline asynchronously.
@@ -69,18 +70,9 @@ public class ScanOrchestrator {
             // Sanitize: strip trailing slashes / extra path segments that break clone
             String repoUrl = sanitizeGitHubUrl(job.getRepoUrl());
             log.info("Cloning repo: {}", repoUrl);
-            ProcessResult cloneResult = runClone(repoUrl, repoPath);
-            if (cloneResult.exitCode() != 0) {
-                // Retry once — transient network hiccup or rate-limit
-                log.warn("git clone failed (exit {}) — retrying once. stderr: {}",
-                        cloneResult.exitCode(), cloneResult.stderr().strip());
-                cloneResult = runClone(repoUrl, repoPath);
-            }
-            if (cloneResult.exitCode() != 0) {
-                throw new RuntimeException(
-                        "git clone failed (exit " + cloneResult.exitCode() + "): "
-                        + cloneResult.stderr().strip());
-            }
+            
+            // Use JGit-based cloning with comprehensive error handling
+            gitCloneService.cloneRepository(repoUrl, repoPath, scanId.toString());
 
             // ── Step 4 ─ Semgrep ─────────────────────────────────────────────
             // Exit code 0 = no findings, 1 = findings found — both are valid.
@@ -124,8 +116,32 @@ public class ScanOrchestrator {
                     trivyJson.substring(0, Math.min(200, trivyJson.length())));
 
             // ── Step 6 ─ Parse ────────────────────────────────────────────────
-            FindingCounts semgrepCounts = semgrepParser.parse(semgrepJson);
-            FindingCounts trivyCounts = trivyParser.parse(trivyJson);
+            FindingCounts semgrepCounts;
+            FindingCounts trivyCounts;
+            
+            try {
+                semgrepCounts = semgrepParser.parse(semgrepJson);
+            } catch (Exception e) {
+                log.error("Failed to parse Semgrep JSON output: {}", e.getMessage());
+                job.setStatus(ScanStatus.FAILED);
+                job.setErrorMessage("Failed to parse Semgrep scan results. The scan output may be malformed or empty.");
+                job.setCompletedAt(LocalDateTime.now());
+                job.setDurationMs(System.currentTimeMillis() - wallStart);
+                repository.save(job);
+                return CompletableFuture.completedFuture(null);
+            }
+            
+            try {
+                trivyCounts = trivyParser.parse(trivyJson);
+            } catch (Exception e) {
+                log.error("Failed to parse Trivy JSON output: {}", e.getMessage());
+                job.setStatus(ScanStatus.FAILED);
+                job.setErrorMessage("Failed to parse Trivy scan results. The scan output may be malformed or empty.");
+                job.setCompletedAt(LocalDateTime.now());
+                job.setDurationMs(System.currentTimeMillis() - wallStart);
+                repository.save(job);
+                return CompletableFuture.completedFuture(null);
+            }
 
             // ── Step 7 ─ Score ────────────────────────────────────────────────
             int semgrepScore = scoreCalculator.calculate(
@@ -180,13 +196,6 @@ public class ScanOrchestrator {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private ProcessResult runClone(String repoUrl, String destPath)
-            throws IOException, InterruptedException {
-        return processRunner.run(
-                List.of("git", "clone", "--depth", "1", repoUrl, destPath),
-                TIMEOUT_FAST_MIN);
-    }
 
     /**
      * Strips trailing slashes and reduces a GitHub URL to

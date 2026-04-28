@@ -141,27 +141,38 @@ const PHASE_STILL_WORKING = 30; // seconds — "still analysing" message
 const PHASE_TIMEOUT_WARN = 180; // seconds — 3 min timeout warning
 
 /* ── Active Scanning — Terminal UI ── */
-function TerminalScanUI({ scanId, onRetry }) {
+function TerminalScanUI({ scanId, onRetry, scanStatus }) {
   const [visibleLines, setVisibleLines] = useState(0);
   const [progress, setProgress] = useState(0);
   const [elapsed, setElapsed] = useState(0); // seconds since mount
+  const [isFailed, setIsFailed] = useState(false);
+
+  // Map backend status to progress percentage
+  const getProgressFromStatus = (status) => {
+    switch (status) {
+      case 'PENDING': return 10;
+      case 'CLONING': return 30;
+      case 'SEMGREP_RUNNING': return 50;
+      case 'TRIVY_RUNNING': return 75;
+      case 'SCORING': return 90;
+      case 'COMPLETED': return 100;
+      case 'FAILED': return 100; // Will show error state
+      default: return 0;
+    }
+  };
 
   useEffect(() => {
     const timers = TERMINAL_LINES.map((line, i) =>
       setTimeout(() => setVisibleLines(v => Math.max(v, i + 1)), line.delay * 1000)
     );
-    // Animate progress bar — slows after 60s to avoid overshooting
-    const progressTimer = setInterval(() => {
-      setProgress(p => {
-        const cap = elapsed > 60 ? 72 : 85;
-        if (p >= cap) return cap;
-        return p + Math.random() * (elapsed > 30 ? 0.6 : 2.5);
-      });
-    }, 300);
+    // Update progress based on scan status
+    setProgress(getProgressFromStatus(scanStatus));
+    // Check if scan has failed
+    setIsFailed(scanStatus === 'FAILED');
     // Wall-clock elapsed seconds counter
     const elapsedTimer = setInterval(() => setElapsed(s => s + 1), 1000);
-    return () => { timers.forEach(clearTimeout); clearInterval(progressTimer); clearInterval(elapsedTimer); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { timers.forEach(clearTimeout); clearInterval(elapsedTimer); };
+  }, [scanStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Derive phase from elapsed time
   const isDbDownload   = elapsed >= PHASE_DB_DOWNLOAD && elapsed < PHASE_STILL_WORKING;
@@ -275,22 +286,46 @@ function TerminalScanUI({ scanId, onRetry }) {
           )}
         </AnimatePresence>
 
-        {/* Progress bar */}
+        {/* Progress bar or Error state */}
         <div className="px-7 pb-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs terminal-text" style={{ color: 'rgba(0,212,255,0.5)' }}>Analysis Progress</span>
-            <span className="text-xs terminal-text font-bold" style={{ color: '#00d4ff' }}>{Math.round(progress)}%</span>
-          </div>
-          <div className="h-2 rounded-full overflow-hidden progress-beam"
-            style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(0,212,255,0.1)' }}>
-            <motion.div
-              className="h-full rounded-full"
-              style={{ background: 'linear-gradient(90deg, #0055bb, #00d4ff, #06b6d4)' }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
-            />
-          </div>
-          <p className="text-xs text-slate-600 mt-2 text-center">Auto-refreshing every 4s · Trivy first-run may take up to 5 min</p>
+          {isFailed ? (
+            <div className="rounded-xl px-4 py-3 flex items-center gap-3"
+              style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)' }}>
+              <span className="shrink-0 text-sm">❌</span>
+              <div className="flex-1">
+                <p className="text-xs font-black" style={{ color: '#f87171' }}>
+                  Scan Failed
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  The security analysis encountered an error and could not complete.
+                </p>
+              </div>
+              <button
+                onClick={onRetry}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black transition-all duration-200"
+                style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
+              >
+                ↺ Retry
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs terminal-text" style={{ color: 'rgba(0,212,255,0.5)' }}>Analysis Progress</span>
+                <span className="text-xs terminal-text font-bold" style={{ color: '#00d4ff' }}>{Math.round(progress)}%</span>
+              </div>
+              <div className="h-2 rounded-full overflow-hidden progress-beam"
+                style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(0,212,255,0.1)' }}>
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: 'linear-gradient(90deg, #0055bb, #00d4ff, #06b6d4)' }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                />
+              </div>
+              <p className="text-xs text-slate-600 mt-2 text-center">Auto-refreshing every 4s · Trivy first-run may take up to 5 min</p>
+            </>
+          )}
         </div>
       </GlassPanel>
     </motion.div>
@@ -658,7 +693,7 @@ export default function ScanResultPage() {
 
             {/* ── Scanning in progress — Terminal UI ── */}
             <AnimatePresence>
-              {isActive && <TerminalScanUI scanId={id} onRetry={handleRetryScan} />}
+              {isActive && <TerminalScanUI scanId={id} onRetry={handleRetryScan} scanStatus={scan?.status} />}
             </AnimatePresence>
 
             {/* ── Completed ── 3-card grid ── */}

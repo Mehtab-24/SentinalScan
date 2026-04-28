@@ -20,7 +20,7 @@ public class TrivyParser {
      */
     public FindingCounts parse(String json) {
         if (json == null || json.isBlank()) {
-            return new FindingCounts(0, 0, 0, 0);
+            throw new IllegalArgumentException("Trivy JSON output is null or empty");
         }
 
         int critical = 0, high = 0, medium = 0, low = 0;
@@ -47,7 +47,8 @@ public class TrivyParser {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to parse Trivy output: {}", e.getMessage());
+            log.error("Failed to parse Trivy JSON output: {}", e.getMessage());
+            throw new RuntimeException("Failed to parse Trivy scan results", e);
         }
 
         log.info("Trivy findings — critical:{} high:{} medium:{} low:{}", critical, high, medium, low);
