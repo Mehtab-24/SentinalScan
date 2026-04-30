@@ -46,7 +46,7 @@ class ScoreCalculatorTest {
     @Test
     void calculate_WithMixedVulnerabilities_ShouldDeductCorrectly() {
         int score = scoreCalculator.calculate(1, 2, 3, 4);
-        assertEquals(75, score); // 100 - 25 (10 + 10 + 6 + 4)
+        assertEquals(70, score); // 100 - 30 (10 + 10 + 6 + 4)
     }
 
     @Test

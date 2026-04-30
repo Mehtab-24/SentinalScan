@@ -26,8 +26,4 @@ Scanning tools (Semgrep, Trivy) need to be installed locally for full functional
 - Frontend dashboard (React)
 - CI/CD pipeline
 - Docker deployment
-<<<<<<< HEAD
 - AI-based vulnerability insights
-=======
-- AI-based vulnerability insights
->>>>>>> 70adf9f3ca3a2f9c19aa6b7bd4d05b6030cc00a5

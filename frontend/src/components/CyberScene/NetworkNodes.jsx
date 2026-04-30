@@ -2,6 +2,11 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
+const seededRandom = (seed) => {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
+
 /**
  * Renders the 3D network of glowing nodes and connection lines.
  * Uses InstancedMesh for high performance.
@@ -15,10 +20,10 @@ export default function NetworkNodes({ count = 75, scanRadius = -1 }) {
     const nodesArr = [];
 
     for (let i = 0; i < count; i++) {
-      const theta = Math.random() * 2 * Math.PI;
-      const phi = Math.acos((Math.random() * 2) - 1);
+      const theta = seededRandom(i + 1) * 2 * Math.PI;
+      const phi = Math.acos((seededRandom(i + 2) * 2) - 1);
       // Spread nodes evenly: avoiding the direct center, expanding outward
-      const r = 3.0 + Math.cbrt(Math.random()) * 7.0;
+      const r = 3.0 + Math.cbrt(seededRandom(i + 3)) * 7.0;
 
       const x = r * Math.sin(phi) * Math.cos(theta);
       const y = r * Math.sin(phi) * Math.sin(theta);
@@ -60,8 +65,8 @@ export default function NetworkNodes({ count = 75, scanRadius = -1 }) {
     for (let i = 0; i < count; i++) {
       props.push({
         isThreat: i % 17 === 0 && i !== 0,
-        baseScale: Math.random() * 0.3 + 0.6, // Slightly softer scale variance
-        phaseOffset: Math.random() * Math.PI * 2
+        baseScale: seededRandom(i + 100) * 0.3 + 0.6, // Slightly softer scale variance
+        phaseOffset: seededRandom(i + 200) * Math.PI * 2
       });
     }
 

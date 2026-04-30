@@ -143,9 +143,7 @@ const PHASE_TIMEOUT_WARN = 180; // seconds — 3 min timeout warning
 /* ── Active Scanning — Terminal UI ── */
 function TerminalScanUI({ scanId, onRetry, scanStatus }) {
   const [visibleLines, setVisibleLines] = useState(0);
-  const [progress, setProgress] = useState(0);
   const [elapsed, setElapsed] = useState(0); // seconds since mount
-  const [isFailed, setIsFailed] = useState(false);
 
   // Map backend status to progress percentage
   const getProgressFromStatus = (status) => {
@@ -165,14 +163,13 @@ function TerminalScanUI({ scanId, onRetry, scanStatus }) {
     const timers = TERMINAL_LINES.map((line, i) =>
       setTimeout(() => setVisibleLines(v => Math.max(v, i + 1)), line.delay * 1000)
     );
-    // Update progress based on scan status
-    setProgress(getProgressFromStatus(scanStatus));
-    // Check if scan has failed
-    setIsFailed(scanStatus === 'FAILED');
     // Wall-clock elapsed seconds counter
     const elapsedTimer = setInterval(() => setElapsed(s => s + 1), 1000);
     return () => { timers.forEach(clearTimeout); clearInterval(elapsedTimer); };
-  }, [scanStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  const progress = getProgressFromStatus(scanStatus);
+  const isFailed = scanStatus === 'FAILED';
 
   // Derive phase from elapsed time
   const isDbDownload   = elapsed >= PHASE_DB_DOWNLOAD && elapsed < PHASE_STILL_WORKING;
@@ -369,7 +366,7 @@ function FindingsPanel({ semgrepFindings, trivyFindings }) {
           message: r.extra?.message ?? r.message ?? '',
         });
       });
-    } catch (_) { /* ignore parse errors */ }
+    } catch { /* ignore parse errors */ }
     // Trivy findings
     try {
       const tv = typeof trivyFindings === 'string' ? JSON.parse(trivyFindings) : trivyFindings;
@@ -385,7 +382,7 @@ function FindingsPanel({ semgrepFindings, trivyFindings }) {
           });
         });
       });
-    } catch (_) { /* ignore parse errors */ }
+    } catch { /* ignore parse errors */ }
     // Sort by severity order
     list.sort((a, b) => {
       const ai = SEVERITY_ORDER.indexOf(a.severity);
@@ -531,7 +528,6 @@ export default function ScanResultPage() {
       const newScan = await submitScan(scan.repoUrl);
       navigate(`/scans/${newScan.id}`);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('Rescan failed', err);
     } finally {
       setRescanning(false);

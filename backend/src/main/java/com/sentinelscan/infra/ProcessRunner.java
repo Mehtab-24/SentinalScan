@@ -3,10 +3,8 @@ package com.sentinelscan.infra;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -113,13 +111,8 @@ public class ProcessRunner {
 
         @Override
         public String get() {
-            StringBuilder sb = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    sb.append(line).append(System.lineSeparator());
-                }
-                return sb.toString();
+            try (inputStream) {
+                return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
             } catch (IOException e) {
                 return "";
             }

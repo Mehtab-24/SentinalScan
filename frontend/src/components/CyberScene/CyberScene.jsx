@@ -34,13 +34,14 @@ export default function CyberScene({ isScanning }) {
 
   // Manage scan animation state
   useEffect(() => {
+    let timeout;
     if (isScanning) {
-      setScanRadius(0); // Start scan
+      timeout = setTimeout(() => setScanRadius(0), 0); // Start scan
     } else {
       // Cool down / reset
-      const timeout = setTimeout(() => setScanRadius(-1), 1000);
-      return () => clearTimeout(timeout);
+      timeout = setTimeout(() => setScanRadius(-1), 1000);
     }
+    return () => clearTimeout(timeout);
   }, [isScanning]);
 
   // Update scanRadius over time when scanning
@@ -52,7 +53,7 @@ export default function CyberScene({ isScanning }) {
       });
     } else if (scanRadius >= 40 && isScanning) {
       // Loop scan wave if still scanning
-      setScanRadius(0);
+      animationFrame = requestAnimationFrame(() => setScanRadius(0));
     }
     return () => cancelAnimationFrame(animationFrame);
   }, [scanRadius, isScanning]);

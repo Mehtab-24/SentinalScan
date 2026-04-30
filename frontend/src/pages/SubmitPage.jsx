@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState } from 'react';
 import { motion, useInView } from 'framer-motion';
 import RepoSubmitForm from '../components/RepoSubmitForm';
 import Navbar from '../components/Navbar';
