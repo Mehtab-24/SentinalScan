@@ -3,8 +3,10 @@ package com.sentinelscan.infra;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -46,8 +48,10 @@ public class ProcessRunner {
         // CRITICAL: Drain stdout and stderr CONCURRENTLY to prevent deadlock
         // If we drain stdout first and it blocks waiting for the process to drain stderr,
         // but stderr's buffer is full, the process will hang forever.
-        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(() -> drainStream(process.getInputStream(), "stdout"));
-        CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(() -> drainStream(process.getErrorStream(), "stderr"));
+        StreamGobbler stdoutGobbler = new StreamGobbler(process.getInputStream(), "stdout");
+        StreamGobbler stderrGobbler = new StreamGobbler(process.getErrorStream(), "stderr");
+        CompletableFuture<String> stdoutFuture = CompletableFuture.supplyAsync(stdoutGobbler);
+        CompletableFuture<String> stderrFuture = CompletableFuture.supplyAsync(stderrGobbler);
 
         // Wait for process to complete (with timeout to prevent infinite hanging)
         boolean completed = process.waitFor(timeoutMinutes, TimeUnit.MINUTES);
@@ -69,8 +73,8 @@ public class ProcessRunner {
         }
 
         // Now join the futures to get both stdout and stderr (should be immediate since process is done)
-        String stdout = stdoutFuture.join();
-        String stderr = stderrFuture.join();
+        String stdout = waitForOutput(stdoutFuture, "stdout");
+        String stderr = waitForOutput(stderrFuture, "stderr");
 
         int exitCode = process.exitValue();
         log.info("Process [{}] exited with code {} (stdout: {} bytes, stderr: {} bytes)",
@@ -92,12 +96,34 @@ public class ProcessRunner {
      * @param streamName  name for logging (e.g., "stdout", "stderr")
      * @return the entire stream contents as a String
      */
-    private String drainStream(InputStream inputStream, String streamName) {
-        try (InputStream in = inputStream) {
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            log.warn("Failed to read {} stream: {}", streamName, e.getMessage());
+    private String waitForOutput(CompletableFuture<String> streamFuture, String streamName) {
+        try {
+            return streamFuture.get(10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.warn("Timed out or failed waiting for {} gobbler: {}", streamName, e.getMessage());
             return "";
         }
     }
+
+    private static class StreamGobbler implements java.util.function.Supplier<String> {
+        private final InputStream inputStream;
+        private StreamGobbler(InputStream inputStream, String streamName) {
+            this.inputStream = inputStream;
+        }
+
+        @Override
+        public String get() {
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sb.append(line).append(System.lineSeparator());
+                }
+                return sb.toString();
+            } catch (IOException e) {
+                return "";
+            }
+        }
+    }
+
 }
