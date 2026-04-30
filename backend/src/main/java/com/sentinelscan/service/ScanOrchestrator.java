@@ -29,17 +29,11 @@ import java.util.concurrent.CompletableFuture;
 public class ScanOrchestrator {
 
     /** Scan mode: 'mock' or 'real' (default: 'mock' for presentation safety). */
-    @Value("${scan.mode:mock}")
+    @Value("${scan.mode:real}")
     private String scanMode;
 
     /** Timeout in minutes for git clone and Semgrep. */
-    private static final int TIMEOUT_FAST_MIN  = 3;
-    /**
-     * Timeout in minutes for Trivy.
-     * First-run downloads the CVE DB (~500 MB) which can take several minutes
-     * on slow connections — 10 minutes gives a safe upper bound.
-     */
-    private static final int TIMEOUT_TRIVY_MIN = 10;
+    private static final int PROCESS_TIMEOUT_MIN = 5;
 
     private final ScanJobRepository repository;
     private final ProcessRunner processRunner;
@@ -90,6 +84,8 @@ public class ScanOrchestrator {
             tempDir = tempDirManager.createTemp(scanId);
             String repoPath = tempDir.toString();
 
+            updatePhase(job, "CLONING_REPOSITORY");
+
             // ── Step 3 ─ Git shallow clone ────────────────────────────────────
             // Sanitize: strip trailing slashes / extra path segments that break clone
             String repoUrl = sanitizeGitHubUrl(job.getRepoUrl());
@@ -97,6 +93,8 @@ public class ScanOrchestrator {
             
             // Use JGit-based cloning with comprehensive error handling
             gitCloneService.cloneRepository(repoUrl, repoPath, scanId.toString());
+
+            updatePhase(job, "RUNNING_SEMGREP");
 
             // ── Step 4 ─ Semgrep (file-based output) ─────────────────────────
             // Semgrep writes results to semgrep-results.json instead of stdout
@@ -117,13 +115,15 @@ public class ScanOrchestrator {
                             "-o", semgrepResultsFile.toString(),
                             "--quiet",
                             repoPath),
-                    TIMEOUT_FAST_MIN);
+                    PROCESS_TIMEOUT_MIN);
             
             String semgrepJson = readScanResultsFile(semgrepResultsFile, "Semgrep");
             if (semgrepResult.exitCode() > 1) {
                 log.warn("Semgrep exited with code {} — treating findings as empty", semgrepResult.exitCode());
                 semgrepJson = "{\"results\":[]}";
             }
+
+            updatePhase(job, "RUNNING_TRIVY");
 
             // ── Step 5 ─ Trivy (file-based output) ────────────────────────────
             String trivyCmd = System.getenv().getOrDefault("TRIVY_PATH", "trivy");
@@ -139,7 +139,7 @@ public class ScanOrchestrator {
                             "--output", trivyResultsFile.toString(),
                             "--quiet",
                             repoPath),
-                    TIMEOUT_TRIVY_MIN);
+                    PROCESS_TIMEOUT_MIN);
             
             String trivyJson = readScanResultsFile(trivyResultsFile, "Trivy");
             if (trivyResult.exitCode() > 1) {
@@ -147,6 +147,8 @@ public class ScanOrchestrator {
                 log.warn("Trivy exited with code {} (error) — treating findings as empty", trivyResult.exitCode());
                 trivyJson = "{\"Results\":[]}";
             }
+
+            updatePhase(job, "PARSING_RESULTS");
 
             // ── Step 6 ─ Parse ────────────────────────────────────────────────
             FindingCounts semgrepCounts;
@@ -176,6 +178,8 @@ public class ScanOrchestrator {
                 return CompletableFuture.completedFuture(null);
             }
 
+            updatePhase(job, "CALCULATING_SCORE");
+
             // ── Step 7 ─ Score ────────────────────────────────────────────────
             int semgrepScore = scoreCalculator.calculate(
                     semgrepCounts.critical(), semgrepCounts.high(),
@@ -188,6 +192,7 @@ public class ScanOrchestrator {
             // ── Step 8 ─ Persist COMPLETED ────────────────────────────────────
             long durationMs = System.currentTimeMillis() - wallStart;
             job.setStatus(ScanStatus.COMPLETED);
+            job.setErrorMessage(null);
             job.setCompletedAt(LocalDateTime.now());
             job.setDurationMs(durationMs);
 
@@ -256,6 +261,12 @@ public class ScanOrchestrator {
             log.error("Failed to read {} results file {}: {}", toolName, resultsFile, e.getMessage());
             return toolName.equals("Trivy") ? "{\"Results\":[]}" : "{\"results\":[]}";
         }
+    }
+
+    private void updatePhase(ScanJob job, String phase) {
+        job.setStatus(ScanStatus.IN_PROGRESS);
+        job.setErrorMessage("PHASE: " + phase);
+        repository.save(job);
     }
 
     /**
