@@ -11,10 +11,12 @@ import com.sentinelscan.parser.TrivyParser;
 import com.sentinelscan.repository.ScanJobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,6 +27,10 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 @Slf4j
 public class ScanOrchestrator {
+
+    /** Scan mode: 'mock' or 'real' (default: 'mock' for presentation safety). */
+    @Value("${scan.mode:mock}")
+    private String scanMode;
 
     /** Timeout in minutes for git clone and Semgrep. */
     private static final int TIMEOUT_FAST_MIN  = 3;
@@ -42,14 +48,32 @@ public class ScanOrchestrator {
     private final TrivyParser trivyParser;
     private final ScoreCalculator scoreCalculator;
     private final GitCloneService gitCloneService;
+    private final MockScanService mockScanService;
 
     /**
      * Runs the full scan pipeline asynchronously.
+     * Routes to MockScanService if scan.mode=mock, otherwise executes real scanning.
      * Steps: git clone → semgrep → trivy → parse → score → save.
      * All temp directories are cleaned up in the finally block even on failure.
      */
     @Async("scanTaskExecutor")
     public CompletableFuture<Void> runScan(UUID scanId) {
+        // Route to mock or real scanning based on configuration
+        if ("mock".equalsIgnoreCase(scanMode)) {
+            log.info("Scan {} routed to MockScanService (demo mode)", scanId);
+            return mockScanService.runScan(scanId);
+        }
+
+        log.info("Scan {} routed to real scanning pipeline (production mode)", scanId);
+        return runRealScan(scanId);
+    }
+
+    /**
+     * Runs the real scanning pipeline with actual Semgrep and Trivy execution.
+     * Steps: git clone → semgrep → trivy → parse → score → save.
+     * All temp directories are cleaned up in the finally block even on failure.
+     */
+    private CompletableFuture<Void> runRealScan(UUID scanId) {
         ScanJob job = repository.findById(scanId)
                 .orElseThrow(() -> new IllegalStateException("Scan job not found: " + scanId));
 
@@ -74,46 +98,55 @@ public class ScanOrchestrator {
             // Use JGit-based cloning with comprehensive error handling
             gitCloneService.cloneRepository(repoUrl, repoPath, scanId.toString());
 
-            // ── Step 4 ─ Semgrep ─────────────────────────────────────────────
+            // ── Step 4 ─ Semgrep (file-based output) ─────────────────────────
+            // Semgrep writes results to semgrep-results.json instead of stdout
             // Exit code 0 = no findings, 1 = findings found — both are valid.
             // Exit code 2+ = actual error.
-            // SEMGREP_PATH env var overrides the default path for portability.
             String semgrepCmd = System.getenv().getOrDefault(
                     "SEMGREP_PATH",
                     "C:\\Users\\Mehtab Singh\\AppData\\Roaming\\Python\\Python310\\Scripts\\semgrep.exe");
+            
+            Path semgrepResultsFile = tempDir.resolve("semgrep-results.json");
+            
             ProcessResult semgrepResult = processRunner.run(
                     List.of(
                             semgrepCmd,
                             "scan",
-                            "--json",
                             "--config", "auto",
+                            "--json",
+                            "-o", semgrepResultsFile.toString(),
+                            "--quiet",
                             repoPath),
                     TIMEOUT_FAST_MIN);
-            String semgrepJson = semgrepResult.output().isBlank() ? "{\"results\":[]}" : semgrepResult.output();
+            
+            String semgrepJson = readScanResultsFile(semgrepResultsFile, "Semgrep");
             if (semgrepResult.exitCode() > 1) {
                 log.warn("Semgrep exited with code {} — treating findings as empty", semgrepResult.exitCode());
                 semgrepJson = "{\"results\":[]}";
             }
 
-            // ── Step 5 ─ Trivy ────────────────────────────────────────────────
-            // TRIVY_PATH env var overrides the default "trivy" command for portability.
-            // --scanners vuln: only scan for CVE vulnerabilities (skip secret/misconfig).
-            // Exit codes: 0 = no findings, 1 = findings found (valid!), 2+ = error.
-            // IMPORTANT: exit 1 means vulnerabilities were found — do NOT discard the output.
-            // Timeout is TIMEOUT_TRIVY_MIN to accommodate first-run CVE DB download (~500 MB).
+            // ── Step 5 ─ Trivy (file-based output) ────────────────────────────
             String trivyCmd = System.getenv().getOrDefault("TRIVY_PATH", "trivy");
+            
+            Path trivyResultsFile = tempDir.resolve("trivy-results.json");
+            
             ProcessResult trivyResult = processRunner.run(
-                    List.of(trivyCmd, "fs", "--format", "json", "--no-progress",
-                            "--scanners", "vuln", repoPath),
+                    List.of(
+                            trivyCmd,
+                            "fs",
+                            "--scanners", "vuln",
+                            "--format", "json",
+                            "--output", trivyResultsFile.toString(),
+                            "--quiet",
+                            repoPath),
                     TIMEOUT_TRIVY_MIN);
-            String trivyJson = trivyResult.output().isBlank() ? "{\"Results\":[]}" : trivyResult.output();
+            
+            String trivyJson = readScanResultsFile(trivyResultsFile, "Trivy");
             if (trivyResult.exitCode() > 1) {
                 // Only a real error (exit 2+) causes us to discard the output.
                 log.warn("Trivy exited with code {} (error) — treating findings as empty", trivyResult.exitCode());
                 trivyJson = "{\"Results\":[]}";
             }
-            log.debug("Trivy raw output: {} chars, first 200: {}", trivyJson.length(),
-                    trivyJson.substring(0, Math.min(200, trivyJson.length())));
 
             // ── Step 6 ─ Parse ────────────────────────────────────────────────
             FindingCounts semgrepCounts;
@@ -196,6 +229,34 @@ public class ScanOrchestrator {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Reads a scan results file from disk with strict null-checking.
+     * If the file doesn't exist or is empty, returns a default empty results JSON.
+     *
+     * @param resultsFile path to the results JSON file
+     * @param toolName    scanner name for logging (e.g., "Semgrep", "Trivy")
+     * @return the file contents, or default empty JSON if file missing/empty
+     */
+    private String readScanResultsFile(Path resultsFile, String toolName) {
+        if (!Files.exists(resultsFile)) {
+            log.warn("{} results file not created: {}", toolName, resultsFile);
+            return toolName.equals("Trivy") ? "{\"Results\":[]}" : "{\"results\":[]}";
+        }
+
+        try {
+            String content = Files.readString(resultsFile);
+            if (content == null || content.isBlank()) {
+                log.warn("{} results file is empty: {}", toolName, resultsFile);
+                return toolName.equals("Trivy") ? "{\"Results\":[]}" : "{\"results\":[]}";
+            }
+            log.info("{} results file read successfully: {} bytes", toolName, content.length());
+            return content;
+        } catch (IOException e) {
+            log.error("Failed to read {} results file {}: {}", toolName, resultsFile, e.getMessage());
+            return toolName.equals("Trivy") ? "{\"Results\":[]}" : "{\"results\":[]}";
+        }
+    }
 
     /**
      * Strips trailing slashes and reduces a GitHub URL to
