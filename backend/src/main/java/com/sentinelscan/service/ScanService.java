@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.UUID;
@@ -38,7 +40,13 @@ public class ScanService {
         repository.save(job);
 
         log.info("Submitted scan {} for {}", job.getId(), repoUrl);
-        orchestrator.runScan(job.getId()); // non-blocking
+        UUID scanId = job.getId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                orchestrator.runScan(scanId); // non-blocking
+            }
+        });
 
         return ScanResponse.from(job);
     }

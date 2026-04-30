@@ -1,5 +1,12 @@
 server:
   port: 8080
+  address: 0.0.0.0
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
+    protocol: org.apache.coyote.http11.Http11NioProtocol
+    accept-count: 100
 
 spring:
   datasource:
@@ -34,10 +41,10 @@ logging:
     org.springframework.web: WARN
 
 # ── Presentation Mode Configuration ──────────────────────────────────────────
-# Set scan.mode to 'mock' for demo mode (default, presentation-safe).
+# Set scan.mode to 'mock' for demo mode (presentation-safe).
 # Set scan.mode to 'real' to execute actual Semgrep and Trivy commands.
 scan:
-  mode: mock  # 'mock' or 'real'
+  mode: real  # 'mock' or 'real'
   mock:
     total-duration-ms: 12000  # Total simulated scan time in milliseconds
     phase-durations-ms: "2000,3000,4000,3000"  # Clone, Semgrep, Trivy, Scoring phases (milliseconds)
