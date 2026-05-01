@@ -40,6 +40,9 @@ logging:
     org.flywaydb: INFO
     org.springframework.web: WARN
 
+cors:
+  allowed-origins: http://localhost:*,http://127.0.0.1:*
+
 # ── Presentation Mode Configuration ──────────────────────────────────────────
 # Set scan.mode to 'mock' for demo mode (presentation-safe).
 # Set scan.mode to 'real' to execute actual Semgrep and Trivy commands.

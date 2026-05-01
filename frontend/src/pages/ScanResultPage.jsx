@@ -12,6 +12,24 @@ const TERMINAL_STATUSES = ['COMPLETED', 'FAILED'];
 const ACTIVE_STATUSES   = ['PENDING', 'RUNNING', 'IN_PROGRESS'];
 const POLL_INTERVAL_MS  = 4000;
 
+function getScanPhase(scan) {
+  if (!scan) return null;
+  if (scan.status !== 'IN_PROGRESS') return scan.status;
+
+  const phase = scan.errorMessage?.startsWith('PHASE: ')
+    ? scan.errorMessage.slice('PHASE: '.length)
+    : '';
+
+  switch (phase) {
+    case 'CLONING_REPOSITORY': return 'CLONING';
+    case 'RUNNING_SEMGREP': return 'SEMGREP_RUNNING';
+    case 'RUNNING_TRIVY': return 'TRIVY_RUNNING';
+    case 'PARSING_RESULTS':
+    case 'CALCULATING_SCORE': return 'SCORING';
+    default: return scan.status;
+  }
+}
+
 /** Compute letter grade from numeric score */
 function computeGrade(score) {
   if (score == null) return null;
@@ -496,20 +514,30 @@ export default function ScanResultPage() {
   const intervalRef                 = useRef(null);
 
   const startPolling = useCallback(() => {
+    clearInterval(intervalRef.current);
+
     async function fetchScan() {
       try {
         const data = await getScan(id);
         setScan(data);
         setFetchError('');
-        if (TERMINAL_STATUSES.includes(data.status)) clearInterval(intervalRef.current);
+        if (TERMINAL_STATUSES.includes(data.status)) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
       } catch (err) {
-        setFetchError(err.response?.data?.message ?? 'Could not reach the server.');
-        clearInterval(intervalRef.current);
+        const message = err.code === 'ECONNABORTED'
+          ? 'The server did not respond in time. Check that the backend is running on port 8080.'
+          : err.response?.data?.message ?? 'Could not reach the server.';
+        setFetchError(message);
       }
     }
     fetchScan();
     intervalRef.current = setInterval(fetchScan, POLL_INTERVAL_MS);
-    return () => clearInterval(intervalRef.current);
+    return () => {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
   }, [id]);
 
   useEffect(() => { const c = startPolling(); return c; }, [startPolling]);
@@ -534,6 +562,7 @@ export default function ScanResultPage() {
     }
   }
 
+  const scanPhase  = getScanPhase(scan);
   const isActive   = scan && ACTIVE_STATUSES.includes(scan.status);
   const isComplete = scan?.status === 'COMPLETED';
   const isFailed   = scan?.status === 'FAILED';
@@ -689,7 +718,7 @@ export default function ScanResultPage() {
 
             {/* ── Scanning in progress — Terminal UI ── */}
             <AnimatePresence>
-              {isActive && <TerminalScanUI scanId={id} onRetry={handleRetryScan} scanStatus={scan?.status} />}
+              {isActive && <TerminalScanUI scanId={id} onRetry={handleRetryScan} scanStatus={scanPhase} />}
             </AnimatePresence>
 
             {/* ── Completed ── 3-card grid ── */}
