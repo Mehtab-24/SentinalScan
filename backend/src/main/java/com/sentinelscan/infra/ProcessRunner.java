@@ -28,18 +28,27 @@ public class ProcessRunner {
      *
      * @param command        command and arguments
      * @param timeoutMinutes maximum time to wait before forcibly killing the process
+     * @param workingDirectory working directory for the process (null to use default)
      * @return ProcessResult with exit code and stdout content
      * @throws IOException            if process creation fails
      * @throws InterruptedException   if thread is interrupted
      * @throws RuntimeException       if process times out
      */
-    public ProcessResult run(List<String> command, int timeoutMinutes) throws IOException, InterruptedException {
-        log.info("Executing: {}", String.join(" ", command));
+    public ProcessResult run(List<String> command, int timeoutMinutes, java.io.File workingDirectory) throws IOException, InterruptedException {
+        if (workingDirectory != null) {
+            log.info("Executing in directory {}: {}", workingDirectory, String.join(" ", command));
+        } else {
+            log.info("Executing: {}", String.join(" ", command));
+        }
 
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.environment().putAll(System.getenv());
         pb.environment().put("HOME", System.getProperty("user.home"));
         pb.environment().put("NO_COLOR", "1");
+        
+        if (workingDirectory != null) {
+            pb.directory(workingDirectory);
+        }
 
         Process process = pb.start();
 
@@ -83,6 +92,19 @@ public class ProcessRunner {
         }
 
         return new ProcessResult(exitCode, stdout, stderr);
+    }
+
+    /**
+     * Runs an external process without setting a working directory (backward compatibility).
+     *
+     * @param command        command and arguments
+     * @param timeoutMinutes maximum time to wait before forcibly killing the process
+     * @return ProcessResult with exit code and stdout content
+     * @throws IOException            if process creation fails
+     * @throws InterruptedException   if thread is interrupted
+     */
+    public ProcessResult run(List<String> command, int timeoutMinutes) throws IOException, InterruptedException {
+        return run(command, timeoutMinutes, null);
     }
 
     /**

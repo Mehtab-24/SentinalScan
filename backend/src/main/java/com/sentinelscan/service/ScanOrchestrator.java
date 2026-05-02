@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -112,16 +111,25 @@ public class ScanOrchestrator {
                             "scan",
                             "--config", "auto",
                             "--json",
-                            "-o", semgrepResultsFile.toString(),
+                            "-o", semgrepResultsFile.toAbsolutePath().toString(),
                             "--quiet",
-                            repoPath),
-                    PROCESS_TIMEOUT_MIN);
+                            "."),
+                    PROCESS_TIMEOUT_MIN,
+                    new java.io.File(repoPath));
             
-            String semgrepJson = readScanResultsFile(semgrepResultsFile, "Semgrep");
-            if (semgrepResult.exitCode() > 1) {
-                log.warn("Semgrep exited with code {} — treating findings as empty", semgrepResult.exitCode());
-                semgrepJson = "{\"results\":[]}";
+            if (semgrepResult.exitCode() >= 2) {
+                String errorDetails = semgrepResult.stderr().isBlank() 
+                    ? "No error details available" 
+                    : semgrepResult.stderr();
+                log.error("Semgrep failed with exit code {}: {}", semgrepResult.exitCode(), errorDetails);
+                throw new RuntimeException("Semgrep execution failed with exit code " + semgrepResult.exitCode() + ": " + errorDetails);
             }
+            
+            if (!Files.exists(semgrepResultsFile)) {
+                throw new RuntimeException("Semgrep results file not found");
+            }
+            
+            String semgrepJson = Files.readString(semgrepResultsFile);
 
             updatePhase(job, "RUNNING_TRIVY");
 
@@ -136,47 +144,31 @@ public class ScanOrchestrator {
                             "fs",
                             "--scanners", "vuln",
                             "--format", "json",
-                            "--output", trivyResultsFile.toString(),
+                            "--output", trivyResultsFile.toAbsolutePath().toString(),
                             "--quiet",
-                            repoPath),
-                    PROCESS_TIMEOUT_MIN);
+                            "."),
+                    PROCESS_TIMEOUT_MIN,
+                    new java.io.File(repoPath));
             
-            String trivyJson = readScanResultsFile(trivyResultsFile, "Trivy");
-            if (trivyResult.exitCode() > 1) {
-                // Only a real error (exit 2+) causes us to discard the output.
-                log.warn("Trivy exited with code {} (error) — treating findings as empty", trivyResult.exitCode());
-                trivyJson = "{\"Results\":[]}";
+            if (trivyResult.exitCode() >= 2) {
+                String errorDetails = trivyResult.stderr().isBlank() 
+                    ? "No error details available" 
+                    : trivyResult.stderr();
+                log.error("Trivy failed with exit code {}: {}", trivyResult.exitCode(), errorDetails);
+                throw new RuntimeException("Trivy execution failed with exit code " + trivyResult.exitCode() + ": " + errorDetails);
             }
+            
+            if (!Files.exists(trivyResultsFile)) {
+                throw new RuntimeException("Trivy results file not found");
+            }
+            
+            String trivyJson = Files.readString(trivyResultsFile);
 
             updatePhase(job, "PARSING_RESULTS");
 
             // ── Step 6 ─ Parse ────────────────────────────────────────────────
-            FindingCounts semgrepCounts;
-            FindingCounts trivyCounts;
-            
-            try {
-                semgrepCounts = semgrepParser.parse(semgrepJson);
-            } catch (Exception e) {
-                log.error("Failed to parse Semgrep JSON output: {}", e.getMessage());
-                job.setStatus(ScanStatus.FAILED);
-                job.setErrorMessage("Failed to parse Semgrep scan results. The scan output may be malformed or empty.");
-                job.setCompletedAt(LocalDateTime.now());
-                job.setDurationMs(System.currentTimeMillis() - wallStart);
-                repository.save(job);
-                return CompletableFuture.completedFuture(null);
-            }
-            
-            try {
-                trivyCounts = trivyParser.parse(trivyJson);
-            } catch (Exception e) {
-                log.error("Failed to parse Trivy JSON output: {}", e.getMessage());
-                job.setStatus(ScanStatus.FAILED);
-                job.setErrorMessage("Failed to parse Trivy scan results. The scan output may be malformed or empty.");
-                job.setCompletedAt(LocalDateTime.now());
-                job.setDurationMs(System.currentTimeMillis() - wallStart);
-                repository.save(job);
-                return CompletableFuture.completedFuture(null);
-            }
+            FindingCounts semgrepCounts = semgrepParser.parse(semgrepJson);
+            FindingCounts trivyCounts = trivyParser.parse(trivyJson);
 
             updatePhase(job, "CALCULATING_SCORE");
 
@@ -234,34 +226,6 @@ public class ScanOrchestrator {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    /**
-     * Reads a scan results file from disk with strict null-checking.
-     * If the file doesn't exist or is empty, returns a default empty results JSON.
-     *
-     * @param resultsFile path to the results JSON file
-     * @param toolName    scanner name for logging (e.g., "Semgrep", "Trivy")
-     * @return the file contents, or default empty JSON if file missing/empty
-     */
-    private String readScanResultsFile(Path resultsFile, String toolName) {
-        if (!Files.exists(resultsFile)) {
-            log.warn("{} results file not created: {}", toolName, resultsFile);
-            return toolName.equals("Trivy") ? "{\"Results\":[]}" : "{\"results\":[]}";
-        }
-
-        try {
-            String content = Files.readString(resultsFile);
-            if (content == null || content.isBlank()) {
-                log.warn("{} results file is empty: {}", toolName, resultsFile);
-                return toolName.equals("Trivy") ? "{\"Results\":[]}" : "{\"results\":[]}";
-            }
-            log.info("{} results file read successfully: {} bytes", toolName, content.length());
-            return content;
-        } catch (IOException e) {
-            log.error("Failed to read {} results file {}: {}", toolName, resultsFile, e.getMessage());
-            return toolName.equals("Trivy") ? "{\"Results\":[]}" : "{\"results\":[]}";
-        }
-    }
 
     private void updatePhase(ScanJob job, String phase) {
         job.setStatus(ScanStatus.IN_PROGRESS);
