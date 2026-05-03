@@ -169,8 +169,6 @@ public class MockScanService {
      *   - Code quality issues (Low x5)
      */
     private String generateMockSemgrepFindings(String repoUrl) {
-        // Deterministic seed based on repo URL for consistency across demo runs
-        int seed = Math.abs(repoUrl.hashCode() % 1000);
 
         return """
                 {

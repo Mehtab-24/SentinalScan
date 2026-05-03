@@ -10,6 +10,7 @@ import Spinner from './Spinner';
 export default function RepoSubmitForm({ onScanningChange }) {
   const [repoUrl, setRepoUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError]     = useState('');
   const [shakeKey, setShakeKey] = useState(0);
   const navigate = useNavigate();
@@ -21,12 +22,16 @@ export default function RepoSubmitForm({ onScanningChange }) {
     if (onScanningChange) onScanningChange(true);
     try {
       const scan = await submitScan(repoUrl);
-      navigate(`/scans/${scan.id}`);
+      setSubmitted(true);
+      setLoading(false);
+      // Wait for a smooth transition before navigating
+      setTimeout(() => {
+        navigate(`/scans/${scan.id}`);
+      }, 800);
     } catch (err) {
       const msg = err.response?.data?.message ?? 'Failed to submit scan. Please try again.';
       setError(msg);
       setShakeKey(k => k + 1); // trigger shake re-mount
-    } finally {
       setLoading(false);
       if (onScanningChange) onScanningChange(false);
     }
@@ -61,21 +66,25 @@ export default function RepoSubmitForm({ onScanningChange }) {
             id="repo-url"
             type="url"
             required
+            disabled={loading || submitted}
             placeholder="https://github.com/owner/repo"
             value={repoUrl}
             onChange={(e) => setRepoUrl(e.target.value)}
-            className="input-neon w-full rounded-xl pl-12 pr-4 py-4 text-sm"
+            className="input-neon w-full rounded-xl pl-12 pr-4 py-4 text-sm transition-all duration-300"
             style={{
               background: 'rgba(4, 10, 22, 0.82)',
               border:     '1px solid rgba(0,212,255,0.15)',
               color:      '#e2e8f0',
               outline:    'none',
+              opacity:    (loading || submitted) ? 0.6 : 1,
             }}
             onFocus={(e) => {
+              if (loading || submitted) return;
               e.target.style.borderColor = 'rgba(0,212,255,0.55)';
               e.target.style.boxShadow   = '0 0 0 3px rgba(0,212,255,0.08), 0 0 25px rgba(0,212,255,0.15)';
             }}
             onBlur={(e) => {
+              if (loading || submitted) return;
               e.target.style.borderColor = 'rgba(0,212,255,0.15)';
               e.target.style.boxShadow   = 'none';
             }}
@@ -104,28 +113,40 @@ export default function RepoSubmitForm({ onScanningChange }) {
       </AnimatePresence>
 
       {/* Submit button */}
-      <motion.button
-        type="submit"
-        disabled={loading}
-        whileHover={!loading ? { scale: 1.02, y: -1 } : {}}
-        whileTap={!loading ? { scale: 0.98 } : {}}
-        className="btn-neon relative flex w-full items-center justify-center gap-2.5 rounded-xl px-4 py-4 text-sm font-bold tracking-wide uppercase transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{ color: '#fff', letterSpacing: '0.1em' }}
-      >
-        {loading ? (
-          <>
-            <Spinner size="h-4 w-4" color="text-white" />
-            <span>Initiating Scan…</span>
-          </>
-        ) : (
-          <>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-            </svg>
-            <span>Start Security Scan</span>
-          </>
+      <AnimatePresence>
+        {!submitted && (
+          <motion.div
+            initial={{ opacity: 1, height: 'auto', scale: 1 }}
+            exit={{ opacity: 0, height: 0, scale: 0.95, marginTop: 0 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            <motion.button
+              type="submit"
+              disabled={loading}
+              whileHover={!loading ? { scale: 1.02, y: -1 } : {}}
+              whileTap={!loading ? { scale: 0.98 } : {}}
+              className="btn-neon relative flex w-full items-center justify-center gap-2.5 rounded-xl px-4 py-4 text-sm font-bold tracking-wide uppercase transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: '#fff', letterSpacing: '0.1em' }}
+            >
+              {loading ? (
+                <>
+                  <Spinner size="h-4 w-4" color="text-white" />
+                  <span>Initiating Scan…</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                  </svg>
+                  <span>Start Security Scan</span>
+                </>
+              )}
+            </motion.button>
+          </motion.div>
         )}
-      </motion.button>
+      </AnimatePresence>
     </form>
   );
 }
+

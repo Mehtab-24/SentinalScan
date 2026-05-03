@@ -258,13 +258,14 @@ function TerminalScanUI({ scanId, onRetry, scanStatus }) {
                   The process may be stuck or waiting for the Trivy CVE DB (~500 MB). You can retry.
                 </p>
               </div>
-              <button
+              <motion.button
                 onClick={onRetry}
-                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black transition-all duration-200"
-                style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
+                whileHover={{ backgroundColor: 'rgba(251, 146, 60, 0.15)' }}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black transition-all duration-300"
+                style={{ background: 'transparent', border: '1px solid rgba(251, 146, 60, 0.4)', color: '#fb923c' }}
               >
                 ↺ Retry
-              </button>
+              </motion.button>
             </motion.div>
           )}
           {isStillWorking && !isTimeoutWarn && (
@@ -315,13 +316,14 @@ function TerminalScanUI({ scanId, onRetry, scanStatus }) {
                   The security analysis encountered an error and could not complete.
                 </p>
               </div>
-              <button
+              <motion.button
                 onClick={onRetry}
-                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black transition-all duration-200"
-                style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
+                whileHover={{ backgroundColor: 'rgba(239, 68, 68, 0.15)' }}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black transition-all duration-300"
+                style={{ background: 'transparent', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#f87171' }}
               >
                 ↺ Retry
-              </button>
+              </motion.button>
             </div>
           ) : (
             <>
@@ -614,12 +616,13 @@ export default function ScanResultPage() {
                     </div>
                   </div>
                   <div className="px-6 py-4">
-                    <button onClick={handleRetryFetch} disabled={retrying}
-                      className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold tracking-wide disabled:opacity-50 transition-all duration-200"
-                      style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
+                    <motion.button onClick={handleRetryFetch} disabled={retrying}
+                      whileHover={!retrying ? { backgroundColor: 'rgba(239, 68, 68, 0.15)' } : {}}
+                      className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold tracking-wide disabled:opacity-50 transition-all duration-300"
+                      style={{ background: 'transparent', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#f87171' }}>
                       {retrying ? <Spinner size="h-3.5 w-3.5" color="text-red-400" /> : '↺'}
                       {retrying ? 'Retrying…' : 'Retry Connection'}
-                    </button>
+                    </motion.button>
                   </div>
                 </GlassPanel>
               </TiltCard>
@@ -930,8 +933,14 @@ export default function ScanResultPage() {
                       </div>
                       <div className="px-6 pb-5">
                         <motion.button onClick={handleRetryScan}
-                          whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.98 }}
-                          className="btn-neon inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-black tracking-wide text-white">
+                          whileHover={{ scale: 1.02, y: -1, boxShadow: '0 0 25px rgba(0, 212, 255, 0.6)' }}
+                          whileTap={{ scale: 0.98 }}
+                          className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-black tracking-wide text-white transition-all duration-300"
+                          style={{
+                            background: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+                            boxShadow: '0 4px 14px rgba(6, 182, 212, 0.3)',
+                            border: '1px solid rgba(6, 182, 212, 0.5)'
+                          }}>
                           ↺ Try a New Scan
                         </motion.button>
                       </div>

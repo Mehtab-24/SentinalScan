@@ -1,6 +1,7 @@
 package com.sentinelscan.infra;
 
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -26,15 +27,18 @@ public class ProcessRunner {
      * 2. Waits for the process to complete with timeout
      * 3. Joins both futures to retrieve the captured output
      *
-     * @param command        command and arguments
-     * @param timeoutMinutes maximum time to wait before forcibly killing the process
-     * @param workingDirectory working directory for the process (null to use default)
+     * @param command          command and arguments
+     * @param timeoutMinutes   maximum time to wait before forcibly killing the
+     *                         process
+     * @param workingDirectory working directory for the process (null to use
+     *                         default)
      * @return ProcessResult with exit code and stdout content
-     * @throws IOException            if process creation fails
-     * @throws InterruptedException   if thread is interrupted
-     * @throws RuntimeException       if process times out
+     * @throws IOException          if process creation fails
+     * @throws InterruptedException if thread is interrupted
+     * @throws RuntimeException     if process times out
      */
-    public ProcessResult run(List<String> command, int timeoutMinutes, java.io.File workingDirectory) throws IOException, InterruptedException {
+    public ProcessResult run(List<String> command, int timeoutMinutes, java.io.File workingDirectory)
+            throws IOException, InterruptedException {
         if (workingDirectory != null) {
             log.info("Executing in directory {}: {}", workingDirectory, String.join(" ", command));
         } else {
@@ -42,7 +46,7 @@ public class ProcessRunner {
         }
 
         ProcessBuilder pb = new ProcessBuilder(command);
-        Map<String, String> env = pb.environment();
+        java.util.Map<String, String> env = pb.environment();
         env.putAll(System.getenv());
         env.put("HOME", System.getProperty("user.home"));
         env.put("NO_COLOR", "1");
@@ -50,7 +54,7 @@ public class ProcessRunner {
         env.put("PYTHONIOENCODING", "utf-8");
         env.put("LANG", "en_US.UTF-8");
         env.put("LC_ALL", "en_US.UTF-8");
-        
+
         if (workingDirectory != null) {
             pb.directory(workingDirectory);
         }
@@ -58,7 +62,8 @@ public class ProcessRunner {
         Process process = pb.start();
 
         // CRITICAL: Drain stdout and stderr CONCURRENTLY to prevent deadlock
-        // If we drain stdout first and it blocks waiting for the process to drain stderr,
+        // If we drain stdout first and it blocks waiting for the process to drain
+        // stderr,
         // but stderr's buffer is full, the process will hang forever.
         StreamGobbler stdoutGobbler = new StreamGobbler(process.getInputStream(), "stdout");
         StreamGobbler stderrGobbler = new StreamGobbler(process.getErrorStream(), "stderr");
@@ -84,7 +89,8 @@ public class ProcessRunner {
                     "Process timed out after %d minutes: %s".formatted(timeoutMinutes, command.get(0)));
         }
 
-        // Now join the futures to get both stdout and stderr (should be immediate since process is done)
+        // Now join the futures to get both stdout and stderr (should be immediate since
+        // process is done)
         String stdout = waitForOutput(stdoutFuture, "stdout");
         String stderr = waitForOutput(stderrFuture, "stderr");
 
@@ -100,13 +106,15 @@ public class ProcessRunner {
     }
 
     /**
-     * Runs an external process without setting a working directory (backward compatibility).
+     * Runs an external process without setting a working directory (backward
+     * compatibility).
      *
      * @param command        command and arguments
-     * @param timeoutMinutes maximum time to wait before forcibly killing the process
+     * @param timeoutMinutes maximum time to wait before forcibly killing the
+     *                       process
      * @return ProcessResult with exit code and stdout content
-     * @throws IOException            if process creation fails
-     * @throws InterruptedException   if thread is interrupted
+     * @throws IOException          if process creation fails
+     * @throws InterruptedException if thread is interrupted
      */
     public ProcessResult run(List<String> command, int timeoutMinutes) throws IOException, InterruptedException {
         return run(command, timeoutMinutes, null);
@@ -132,6 +140,7 @@ public class ProcessRunner {
 
     private static class StreamGobbler implements java.util.function.Supplier<String> {
         private final InputStream inputStream;
+
         private StreamGobbler(InputStream inputStream, String streamName) {
             this.inputStream = inputStream;
         }

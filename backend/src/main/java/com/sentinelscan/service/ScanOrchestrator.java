@@ -21,7 +21,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.io.File;
 
 @Service
 @RequiredArgsConstructor
@@ -48,7 +47,8 @@ public class ScanOrchestrator {
 
     /**
      * Runs the full scan pipeline asynchronously.
-     * Routes to MockScanService if scan.mode=mock, otherwise executes real scanning.
+     * Routes to MockScanService if scan.mode=mock, otherwise executes real
+     * scanning.
      * Steps: git clone → semgrep → trivy → parse → score → save.
      * All temp directories are cleaned up in the finally block even on failure.
      */
@@ -92,7 +92,7 @@ public class ScanOrchestrator {
             // Sanitize: strip trailing slashes / extra path segments that break clone
             String repoUrl = sanitizeGitHubUrl(job.getRepoUrl());
             log.info("Cloning repo: {}", repoUrl);
-            
+
             // Use JGit-based cloning with comprehensive error handling
             gitCloneService.cloneRepository(repoUrl, repoPath, scanId.toString());
 
@@ -132,9 +132,10 @@ public class ScanOrchestrator {
             // Semgrep writes results to semgrep-results.json instead of stdout
             // Exit code 0 = no findings, 1 = findings found — both are valid.
             // Exit code 2+ = actual error.
-            // UTF-8 encoding is enforced globally in ProcessRunner via environment variables
+            // UTF-8 encoding is enforced globally in ProcessRunner via environment
+            // variables
             String absoluteOutputPath = Path.of(repoPath, "semgrep-results.json").toAbsolutePath().toString();
-            
+
             ProcessResult semgrepResult = processRunner.run(
                     List.of(
                             "semgrep",
@@ -147,27 +148,29 @@ public class ScanOrchestrator {
                             "."),
                     PROCESS_TIMEOUT_MIN,
                     new java.io.File(repoPath));
-            
+
             if (semgrepResult.exitCode() >= 2) {
-                String errorDetails = !semgrepResult.stderr().isBlank() 
-                    ? semgrepResult.stderr() 
-                    : (!semgrepResult.output().isBlank() ? semgrepResult.output() : "Semgrep exited with code " + semgrepResult.exitCode());
+                String errorDetails = !semgrepResult.stderr().isBlank()
+                        ? semgrepResult.stderr()
+                        : (!semgrepResult.output().isBlank() ? semgrepResult.output()
+                                : "Semgrep exited with code " + semgrepResult.exitCode());
                 log.error("Semgrep failed with exit code {}: {}", semgrepResult.exitCode(), errorDetails);
-                throw new RuntimeException("Semgrep execution failed with exit code " + semgrepResult.exitCode() + ": " + errorDetails);
+                throw new RuntimeException(
+                        "Semgrep execution failed with exit code " + semgrepResult.exitCode() + ": " + errorDetails);
             }
-            
+
             Path semgrepResultsFile = tempDir.resolve("semgrep-results.json");
             if (!Files.exists(semgrepResultsFile)) {
                 throw new RuntimeException("Semgrep results file not found");
             }
-            
+
             String semgrepJson = Files.readString(semgrepResultsFile);
 
             updatePhase(job, "RUNNING_TRIVY");
 
             // ── Step 5 ─ Trivy (file-based output) ────────────────────────────
             String trivyCmd = System.getenv().getOrDefault("TRIVY_PATH", "trivy");
-            
+
             ProcessResult trivyResult = processRunner.run(
                     List.of(
                             trivyCmd,
@@ -178,20 +181,22 @@ public class ScanOrchestrator {
                             "."),
                     PROCESS_TIMEOUT_MIN,
                     new java.io.File(repoPath));
-            
+
             if (trivyResult.exitCode() >= 2) {
-                String errorDetails = !trivyResult.stderr().isBlank() 
-                    ? trivyResult.stderr() 
-                    : (!trivyResult.output().isBlank() ? trivyResult.output() : "Trivy exited with code " + trivyResult.exitCode());
+                String errorDetails = !trivyResult.stderr().isBlank()
+                        ? trivyResult.stderr()
+                        : (!trivyResult.output().isBlank() ? trivyResult.output()
+                                : "Trivy exited with code " + trivyResult.exitCode());
                 log.error("Trivy failed with exit code {}: {}", trivyResult.exitCode(), errorDetails);
-                throw new RuntimeException("Trivy execution failed with exit code " + trivyResult.exitCode() + ": " + errorDetails);
+                throw new RuntimeException(
+                        "Trivy execution failed with exit code " + trivyResult.exitCode() + ": " + errorDetails);
             }
-            
+
             Path trivyResultsFile = tempDir.resolve("trivy-results.json");
             if (!Files.exists(trivyResultsFile)) {
                 throw new RuntimeException("Trivy results file not found");
             }
-            
+
             String trivyJson = Files.readString(trivyResultsFile);
 
             updatePhase(job, "PARSING_RESULTS");
@@ -269,13 +274,16 @@ public class ScanOrchestrator {
      * No-op for URLs that are already clean.
      */
     static String sanitizeGitHubUrl(String raw) {
-        if (raw == null) return raw;
-        String url = raw.strip().replaceAll("/+$", "");          // remove trailing slashes
-        // Keep only the first 5 path segments: "" / "owner" / "repo"  (after split on "//")
+        if (raw == null)
+            return raw;
+        String url = raw.strip().replaceAll("/+$", ""); // remove trailing slashes
+        // Keep only the first 5 path segments: "" / "owner" / "repo" (after split on
+        // "//")
         // e.g. https://github.com/owner/repo/tree/main → https://github.com/owner/repo
         String[] parts = url.split("/");
         if (parts.length > 5) {
-            // parts[0]="https:", parts[1]="", parts[2]="github.com", parts[3]=owner, parts[4]=repo
+            // parts[0]="https:", parts[1]="", parts[2]="github.com", parts[3]=owner,
+            // parts[4]=repo
             url = String.join("/", parts[0], parts[1], parts[2], parts[3], parts[4]);
         }
         return url;
