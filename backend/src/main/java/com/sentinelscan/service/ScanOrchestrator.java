@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.io.File;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +43,8 @@ public class ScanOrchestrator {
     private final ScoreCalculator scoreCalculator;
     private final GitCloneService gitCloneService;
     private final MockScanService mockScanService;
+    private final SensitiveFileScanner sensitiveFileScanner;
+    private final AiSummaryService aiSummaryService;
 
     /**
      * Runs the full scan pipeline asynchronously.
@@ -93,6 +96,36 @@ public class ScanOrchestrator {
             // Use JGit-based cloning with comprehensive error handling
             gitCloneService.cloneRepository(repoUrl, repoPath, scanId.toString());
 
+            updatePhase(job, "SCANNING_SENSITIVE_FILES");
+
+            // ── Step 3.5 ─ Scan for sensitive files ──────────────────────────
+            try {
+                log.info("Starting sensitive file scan for scan {}", scanId);
+                List<String> leakedFiles = sensitiveFileScanner.scan(repoPath);
+                job.setLeakedFiles(leakedFiles);
+                log.info("Sensitive file scan completed for scan {} - found {} files", scanId, leakedFiles.size());
+            } catch (Exception e) {
+                log.error("Sensitive file scan failed for scan {}: {}", scanId, e.getMessage(), e);
+                job.setLeakedFiles(List.of());
+            }
+
+            updatePhase(job, "GENERATING_AI_SUMMARY");
+
+            // ── Step 3.6 ─ Generate AI summary ──────────────────────────────
+            try {
+                log.info("Starting AI summary generation for scan {}", scanId);
+                String aiSummary = aiSummaryService.generateSummary(repoPath);
+                job.setAiSummary(aiSummary);
+                log.info("AI summary generation completed for scan {}", scanId);
+            } catch (Exception e) {
+                log.error("AI summary generation failed for scan {}: {}", scanId, e.getMessage(), e);
+                job.setAiSummary("AI Summary unavailable");
+            }
+
+            // Save state after new services complete
+            repository.save(job);
+            log.info("Database updated after sensitive file scan and AI summary for scan {}", scanId);
+
             updatePhase(job, "RUNNING_SEMGREP");
 
             // ── Step 4 ─ Semgrep (file-based output) ─────────────────────────
@@ -103,28 +136,25 @@ public class ScanOrchestrator {
                     "SEMGREP_PATH",
                     "C:\\Users\\Mehtab Singh\\AppData\\Roaming\\Python\\Python310\\Scripts\\semgrep.exe");
             
-            Path semgrepResultsFile = tempDir.resolve("semgrep-results.json");
+            String absoluteOutputPath = Path.of(repoPath, "semgrep-results.json").toAbsolutePath().toString();
             
             ProcessResult semgrepResult = processRunner.run(
                     List.of(
-                            semgrepCmd,
-                            "scan",
-                            "--config", "auto",
-                            "--json",
-                            "-o", semgrepResultsFile.toAbsolutePath().toString(),
-                            "--quiet",
-                            "."),
+                            "cmd.exe",
+                            "/c",
+                            "chcp 65001 > NUL && set PYTHONUTF8=1 && " + semgrepCmd + " scan --config auto --json -o \"" + absoluteOutputPath + "\" ."),
                     PROCESS_TIMEOUT_MIN,
                     new java.io.File(repoPath));
             
             if (semgrepResult.exitCode() >= 2) {
-                String errorDetails = semgrepResult.stderr().isBlank() 
-                    ? "No error details available" 
-                    : semgrepResult.stderr();
+                String errorDetails = !semgrepResult.stderr().isBlank() 
+                    ? semgrepResult.stderr() 
+                    : (!semgrepResult.output().isBlank() ? semgrepResult.output() : "Semgrep exited with code " + semgrepResult.exitCode());
                 log.error("Semgrep failed with exit code {}: {}", semgrepResult.exitCode(), errorDetails);
                 throw new RuntimeException("Semgrep execution failed with exit code " + semgrepResult.exitCode() + ": " + errorDetails);
             }
             
+            Path semgrepResultsFile = tempDir.resolve("semgrep-results.json");
             if (!Files.exists(semgrepResultsFile)) {
                 throw new RuntimeException("Semgrep results file not found");
             }
@@ -136,28 +166,26 @@ public class ScanOrchestrator {
             // ── Step 5 ─ Trivy (file-based output) ────────────────────────────
             String trivyCmd = System.getenv().getOrDefault("TRIVY_PATH", "trivy");
             
-            Path trivyResultsFile = tempDir.resolve("trivy-results.json");
-            
             ProcessResult trivyResult = processRunner.run(
                     List.of(
                             trivyCmd,
                             "fs",
                             "--scanners", "vuln",
                             "--format", "json",
-                            "--output", trivyResultsFile.toAbsolutePath().toString(),
-                            "--quiet",
+                            "--output", "trivy-results.json",
                             "."),
                     PROCESS_TIMEOUT_MIN,
                     new java.io.File(repoPath));
             
             if (trivyResult.exitCode() >= 2) {
-                String errorDetails = trivyResult.stderr().isBlank() 
-                    ? "No error details available" 
-                    : trivyResult.stderr();
+                String errorDetails = !trivyResult.stderr().isBlank() 
+                    ? trivyResult.stderr() 
+                    : (!trivyResult.output().isBlank() ? trivyResult.output() : "Trivy exited with code " + trivyResult.exitCode());
                 log.error("Trivy failed with exit code {}: {}", trivyResult.exitCode(), errorDetails);
                 throw new RuntimeException("Trivy execution failed with exit code " + trivyResult.exitCode() + ": " + errorDetails);
             }
             
+            Path trivyResultsFile = tempDir.resolve("trivy-results.json");
             if (!Files.exists(trivyResultsFile)) {
                 throw new RuntimeException("Trivy results file not found");
             }

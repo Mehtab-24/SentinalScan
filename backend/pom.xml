@@ -60,6 +60,12 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Jackson Java 8 Date/Time Support -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
         <!-- JGit for repository cloning -->
         <dependency>
             <groupId>org.eclipse.jgit</groupId>

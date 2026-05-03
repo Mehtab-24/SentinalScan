@@ -747,8 +747,64 @@ export default function ScanResultPage() {
                     </TiltCard>
                   </motion.div>
 
+                  {/* AI Repository Summary Card */}
+                  {scan.aiSummary && (
+                    <motion.div variants={cardVariants}>
+                      <TiltCard>
+                        <div className="rounded-2xl overflow-hidden"
+                          style={{ background: 'rgba(5,10,24,0.82)', border: '1px solid rgba(59,130,246,0.15)', backdropFilter: 'blur(20px)' }}>
+                          <div className="absolute top-0 left-8 right-8 h-px"
+                            style={{ background: 'linear-gradient(90deg, transparent, rgba(59,130,246,0.4), transparent)' }} />
+                          <div className="px-6 py-5 flex items-start gap-4">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg font-bold"
+                              style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', color: '#3b82f6', boxShadow: '0 0 15px rgba(59,130,246,0.25)' }}>🤖</div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-black text-slate-100 mb-2">AI Repository Summary</p>
+                              <p className="text-sm text-slate-300 leading-relaxed">{scan.aiSummary}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </TiltCard>
+                    </motion.div>
+                  )}
+
+                  {/* Critical Warning: Sensitive Files Detected */}
+                  {scan.leakedFiles && scan.leakedFiles.length > 0 && (
+                    <motion.div variants={cardVariants}>
+                      <TiltCard>
+                        <div className="rounded-2xl overflow-hidden"
+                          style={{ background: 'rgba(5,10,24,0.82)', border: '1px solid rgba(239,68,68,0.25)', backdropFilter: 'blur(20px)', boxShadow: '0 0 30px rgba(239,68,68,0.08)' }}>
+                          <div className="absolute top-0 left-8 right-8 h-px"
+                            style={{ background: 'linear-gradient(90deg, transparent, rgba(239,68,68,0.5), transparent)' }} />
+                          <div className="px-6 py-5 flex items-start gap-4" style={{ borderBottom: '1px solid rgba(239,68,68,0.12)' }}>
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg font-bold animate-pulse"
+                              style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', boxShadow: '0 0 20px rgba(239,68,68,0.35)' }}>⚠</div>
+                            <div className="flex-1">
+                              <p className="text-sm font-black" style={{ color: '#f87171', textShadow: '0 0 10px rgba(239,68,68,0.5)' }}>Critical Warning: Sensitive Files Detected</p>
+                              <p className="text-xs text-slate-500 mt-0.5">The following files may contain secrets and should be removed from the repository immediately</p>
+                            </div>
+                          </div>
+                          <div className="px-6 py-4 space-y-2">
+                            {scan.leakedFiles.map((file, idx) => (
+                              <div key={idx} className="flex items-center gap-3 rounded-lg px-3 py-2"
+                                style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                                <span className="shrink-0 text-sm" style={{ color: '#f87171' }}>🔓</span>
+                                <span className="text-sm font-mono text-slate-300 truncate" title={file}>{file}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="px-6 py-4 bg-red-950/10 border-t border-red-900/20">
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                              <span className="font-bold text-red-300">Recommended Actions:</span> Remove these files from git history using <code className="bg-slate-900/50 px-1.5 py-0.5 rounded text-xs">git filter-branch</code> or <code className="bg-slate-900/50 px-1.5 py-0.5 rounded text-xs">BFG Repo-Cleaner</code>, rotate any exposed credentials, and add them to <code className="bg-slate-900/50 px-1.5 py-0.5 rounded text-xs">.gitignore</code>.
+                            </p>
+                          </div>
+                        </div>
+                      </TiltCard>
+                    </motion.div>
+                  )}
+
                   {/* 3-card grid: Semgrep + Trivy + Overall */}
-                  <motion.div variants={cardVariants} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <motion.div variants={cardVariants} className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ marginTop: '1rem' }}>
                     <TiltCard>
                       <MiniScoreCard label="Semgrep" score={scan.semgrepScore ?? scan.sast_score ?? null}
                         description="Static code analysis" icon="🔬" />

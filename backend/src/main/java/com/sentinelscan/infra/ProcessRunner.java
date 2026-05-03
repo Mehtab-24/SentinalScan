@@ -45,6 +45,8 @@ public class ProcessRunner {
         pb.environment().putAll(System.getenv());
         pb.environment().put("HOME", System.getProperty("user.home"));
         pb.environment().put("NO_COLOR", "1");
+        pb.environment().put("PYTHONUTF8", "1");
+        pb.environment().put("PYTHONIOENCODING", "utf8");
         
         if (workingDirectory != null) {
             pb.directory(workingDirectory);

@@ -5,8 +5,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -76,6 +76,14 @@ public class ScanJob {
 
     @Column(name = "trivy_findings", columnDefinition = "TEXT")
     private String trivyFindings;
+
+    @ElementCollection
+    @CollectionTable(name = "scan_job_leaked_files", joinColumns = @JoinColumn(name = "scan_job_id"))
+    @Column(name = "file_path")
+    private List<String> leakedFiles;
+
+    @Column(name = "ai_summary", columnDefinition = "TEXT")
+    private String aiSummary;
 
     @Column(name = "duration_ms")
     private Long durationMs;
