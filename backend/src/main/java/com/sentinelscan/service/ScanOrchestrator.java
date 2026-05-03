@@ -132,17 +132,19 @@ public class ScanOrchestrator {
             // Semgrep writes results to semgrep-results.json instead of stdout
             // Exit code 0 = no findings, 1 = findings found — both are valid.
             // Exit code 2+ = actual error.
-            String semgrepCmd = System.getenv().getOrDefault(
-                    "SEMGREP_PATH",
-                    "C:\\Users\\Mehtab Singh\\AppData\\Roaming\\Python\\Python310\\Scripts\\semgrep.exe");
-            
+            // UTF-8 encoding is enforced globally in ProcessRunner via environment variables
             String absoluteOutputPath = Path.of(repoPath, "semgrep-results.json").toAbsolutePath().toString();
             
             ProcessResult semgrepResult = processRunner.run(
                     List.of(
-                            "cmd.exe",
-                            "/c",
-                            "chcp 65001 > NUL && set PYTHONUTF8=1 && " + semgrepCmd + " scan --config auto --json -o \"" + absoluteOutputPath + "\" ."),
+                            "semgrep",
+                            "scan",
+                            "--config",
+                            "auto",
+                            "--json",
+                            "-o",
+                            absoluteOutputPath,
+                            "."),
                     PROCESS_TIMEOUT_MIN,
                     new java.io.File(repoPath));
             

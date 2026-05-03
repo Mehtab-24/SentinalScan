@@ -42,11 +42,14 @@ public class ProcessRunner {
         }
 
         ProcessBuilder pb = new ProcessBuilder(command);
-        pb.environment().putAll(System.getenv());
-        pb.environment().put("HOME", System.getProperty("user.home"));
-        pb.environment().put("NO_COLOR", "1");
-        pb.environment().put("PYTHONUTF8", "1");
-        pb.environment().put("PYTHONIOENCODING", "utf8");
+        Map<String, String> env = pb.environment();
+        env.putAll(System.getenv());
+        env.put("HOME", System.getProperty("user.home"));
+        env.put("NO_COLOR", "1");
+        env.put("PYTHONUTF8", "1");
+        env.put("PYTHONIOENCODING", "utf-8");
+        env.put("LANG", "en_US.UTF-8");
+        env.put("LC_ALL", "en_US.UTF-8");
         
         if (workingDirectory != null) {
             pb.directory(workingDirectory);
