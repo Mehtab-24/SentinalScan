@@ -1,59 +1,33 @@
 package com.sentinelscan.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Map;
-
+/**
+ * AI Summary Service — local LLM (Ollama/Qwen) integration is intentionally
+ * disabled. The Ollama endpoint at localhost:11434 is not available in this
+ * environment, so attempting to reach it would cause the scan pipeline to hang.
+ *
+ * To re-enable: inject a RestTemplate, restore the HTTP call to
+ * "http://localhost:11434/api/generate", and parse the JSON "response" field.
+ */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class AiSummaryService {
 
-    private static final String OLLAMA_API_URL = "http://localhost:11434/api/generate";
-    private static final String MODEL = "qwen2.5-coder:7b";
-    private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper;
+    private static final String DISABLED_MESSAGE =
+            "AI Context Generation disabled for this local scan.";
 
+    /**
+     * Returns a static placeholder string instead of calling the local LLM.
+     * The value is persisted to the {@code ai_summary} column in {@code scan_jobs}
+     * and forwarded to the React frontend in the final JSON response.
+     *
+     * @param repoPath path to the cloned repository (unused while disabled)
+     * @return hardcoded summary string
+     */
     public String generateSummary(String repoPath) {
-        try {
-            Path readmePath = Paths.get(repoPath, "README.md");
-            if (!Files.exists(readmePath)) {
-                log.info("README.md not found in {}", repoPath);
-                return null;
-            }
-
-            String readmeContent = Files.readString(readmePath);
-            String prompt = "Summarize this project in 3 short sentences based on this README: " + readmeContent;
-
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("model", MODEL);
-            payload.put("prompt", prompt);
-            payload.put("stream", false);
-
-            String response = restTemplate.postForObject(OLLAMA_API_URL, payload, String.class);
-            return extractResponse(response);
-        } catch (Exception e) {
-            log.error("Error generating AI summary for {}: {}", repoPath, e.getMessage());
-            return null;
-        }
-    }
-
-    private String extractResponse(String jsonResponse) {
-        try {
-            JsonNode root = objectMapper.readTree(jsonResponse);
-            return root.path("response").asText();
-        } catch (Exception e) {
-            log.error("Error parsing AI response: {}", e.getMessage());
-            return null;
-        }
+        log.info("AI summary generation is disabled — returning static placeholder for path: {}", repoPath);
+        return DISABLED_MESSAGE;
     }
 }
