@@ -77,10 +77,21 @@ public class ProcessRunner {
         if (!completed) {
             log.error("Process timeout after {} minutes: {}", timeoutMinutes, command.get(0));
             process.destroyForcibly();
-            // Wait a bit more for the process to actually die after forcible termination
+
+            // CRITICAL: cancel the gobbler futures so threads blocked on readAllBytes()
+            // are interrupted, then close the streams to release OS handles.
+            // Without this, ForkJoinPool worker threads stay blocked indefinitely.
+            stdoutFuture.cancel(true);
+            stderrFuture.cancel(true);
+            try { process.getInputStream().close(); }  catch (IOException ignored) {}
+            try { process.getErrorStream().close(); }   catch (IOException ignored) {}
+            log.warn("Cancelled gobbler futures and closed streams for killed process: {}",
+                    command.get(0));
+
             try {
                 if (!process.waitFor(5, TimeUnit.SECONDS)) {
-                    log.warn("Process did not die after forcible termination: {}", command.get(0));
+                    log.warn("Process did not die within 5s of forcible termination: {}",
+                            command.get(0));
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -131,7 +142,11 @@ public class ProcessRunner {
      */
     private String waitForOutput(CompletableFuture<String> streamFuture, String streamName) {
         try {
-            return streamFuture.get(10, TimeUnit.SECONDS);
+            // 30s: generous enough for large outputs but bounded
+            return streamFuture.get(30, TimeUnit.SECONDS);
+        } catch (java.util.concurrent.CancellationException e) {
+            // Expected when the future was cancelled due to timeout kill above
+            return "";
         } catch (Exception e) {
             log.warn("Timed out or failed waiting for {} gobbler: {}", streamName, e.getMessage());
             return "";

@@ -31,8 +31,9 @@ public class ScanOrchestrator {
     @Value("${scan.mode:real}")
     private String scanMode;
 
-    /** Timeout in minutes for git clone and Semgrep. */
-    private static final int PROCESS_TIMEOUT_MIN = 5;
+    /** Timeout in minutes for each external process (clone, Semgrep, Trivy).
+     *  15 min accommodates first-run Trivy CVE DB download (~500 MB on slow networks). */
+    private static final int PROCESS_TIMEOUT_MIN = 15;
 
     private final ScanJobRepository repository;
     private final ProcessRunner processRunner;
@@ -128,26 +129,28 @@ public class ScanOrchestrator {
 
             updatePhase(job, "RUNNING_SEMGREP");
 
-            // ── Step 4 ─ Semgrep (file-based output) ─────────────────────────
-            // Semgrep writes results to semgrep-results.json instead of stdout
+            // ── Step 4 ─ Semgrep via Docker ───────────────────────────────────
+            // ProcessBuilder(List<String>) calls exec() directly — no shell involved.
+            // Each list element is one complete OS argument, so spaces in the path
+            // are handled correctly WITHOUT any shell quoting.
+            // e.g. "-v", "C:/Users/Mehtab Singh/tmp/scan:/src" → one arg, no issue.
+            // Output is written to /src/semgrep-results.json (= <repoPath>/semgrep-results.json).
             // Exit code 0 = no findings, 1 = findings found — both are valid.
             // Exit code 2+ = actual error.
-            // UTF-8 encoding is enforced globally in ProcessRunner via environment
-            // variables
-            String absoluteOutputPath = Path.of(repoPath, "semgrep-results.json").toAbsolutePath().toString();
+            String dockerRepoPath = toDockerPath(repoPath);
 
             ProcessResult semgrepResult = processRunner.run(
                     List.of(
-                            "semgrep",
-                            "scan",
-                            "--config",
-                            "auto",
+                            "docker", "run", "--rm",
+                            "-v", dockerRepoPath + ":/src",   // spaces safe — no shell parsing
+                            "returntocorp/semgrep",
+                            "semgrep", "scan",
+                            "--config", "auto",
                             "--json",
-                            "-o",
-                            absoluteOutputPath,
-                            "."),
+                            "-o", "/src/semgrep-results.json",
+                            "/src"),
                     PROCESS_TIMEOUT_MIN,
-                    new java.io.File(repoPath));
+                    null);  // working dir not needed; Docker manages paths
 
             if (semgrepResult.exitCode() >= 2) {
                 String errorDetails = !semgrepResult.stderr().isBlank()
@@ -168,19 +171,27 @@ public class ScanOrchestrator {
 
             updatePhase(job, "RUNNING_TRIVY");
 
-            // ── Step 5 ─ Trivy (file-based output) ────────────────────────────
-            String trivyCmd = System.getenv().getOrDefault("TRIVY_PATH", "trivy");
-
+            // ── Step 5 ─ Trivy via Docker ─────────────────────────────────────
+            // Two volume mounts:
+            //   1. <repoPath>:/src          — the code to scan (spaces safe, no quoting)
+            //   2. trivy-cache:/root/.cache/trivy — NAMED Docker volume that persists
+            //      the CVE database across runs.  Without this every ephemeral container
+            //      re-downloads ~500 MB of DB data.
+            // Output is written to /src/trivy-results.json → <repoPath>/trivy-results.json,
+            // exactly where the existing parser looks.
             ProcessResult trivyResult = processRunner.run(
                     List.of(
-                            trivyCmd,
+                            "docker", "run", "--rm",
+                            "-v", dockerRepoPath + ":/src",           // repo mount (spaces OK)
+                            "-v", "trivy-cache:/root/.cache/trivy",  // persistent DB cache
+                            "aquasec/trivy",
                             "fs",
                             "--scanners", "vuln",
                             "--format", "json",
-                            "--output", "trivy-results.json",
-                            "."),
+                            "--output", "/src/trivy-results.json",
+                            "/src"),
                     PROCESS_TIMEOUT_MIN,
-                    new java.io.File(repoPath));
+                    null);  // working dir not needed; Docker manages paths
 
             if (trivyResult.exitCode() >= 2) {
                 String errorDetails = !trivyResult.stderr().isBlank()
@@ -261,6 +272,19 @@ public class ScanOrchestrator {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Converts an absolute host path to a Docker-compatible volume mount path.
+     * On Windows, backslashes are replaced with forward slashes so Docker Desktop
+     * accepts the -v flag (e.g. "C:\foo\bar" → "C:/foo/bar").
+     * On Linux/macOS the path is returned unchanged.
+     */
+    private static String toDockerPath(String hostPath) {
+        return java.nio.file.Paths.get(hostPath)
+                .toAbsolutePath()
+                .toString()
+                .replace('\\', '/');
+    }
 
     private void updatePhase(ScanJob job, String phase) {
         job.setStatus(ScanStatus.IN_PROGRESS);

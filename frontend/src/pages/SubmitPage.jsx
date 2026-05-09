@@ -13,9 +13,9 @@ function HoverCard({ children, className = '', style = {} }) {
     <motion.div
       className={className}
       style={{ ...style }}
-      whileHover={{ 
-        y: -4, 
-        boxShadow: '0 20px 40px rgba(0,0,0,0.4), 0 0 30px rgba(0, 212, 255, 0.15)' 
+      whileHover={{
+        y: -4,
+        boxShadow: '0 20px 40px rgba(0,0,0,0.4), 0 0 30px rgba(0, 212, 255, 0.15)'
       }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
     >
@@ -36,18 +36,18 @@ function FeatureChip({ icon, label, description, accentColor, delay = 0 }) {
       whileHover={{ y: -6, scale: 1.03, transition: { duration: 0.25 } }}
       className="flex flex-col items-center gap-3 p-5 rounded-2xl text-center cursor-default holo-shimmer"
       style={{
-        background:     'rgba(6,12,28,0.75)',
-        border:         `1px solid ${accentColor}25`,
+        background: 'rgba(6,12,28,0.75)',
+        border: `1px solid ${accentColor}25`,
         backdropFilter: 'blur(20px)',
-        boxShadow:      `0 0 30px ${accentColor}12, 0 20px 40px rgba(0,0,0,0.4)`,
+        boxShadow: `0 0 30px ${accentColor}12, 0 20px 40px rgba(0,0,0,0.4)`,
       }}
     >
       <motion.div
         className="flex h-14 w-14 items-center justify-center rounded-xl text-2xl"
         style={{
           background: `linear-gradient(135deg, ${accentColor}22, ${accentColor}08)`,
-          border:     `1px solid ${accentColor}35`,
-          boxShadow:  `0 0 24px ${accentColor}30, inset 0 1px 0 rgba(255,255,255,0.07)`,
+          border: `1px solid ${accentColor}35`,
+          boxShadow: `0 0 24px ${accentColor}30, inset 0 1px 0 rgba(255,255,255,0.07)`,
         }}
         whileHover={{ boxShadow: `0 0 40px ${accentColor}60, inset 0 1px 0 rgba(255,255,255,0.1)` }}
       >
@@ -67,9 +67,11 @@ function FeatureChip({ icon, label, description, accentColor, delay = 0 }) {
 function FloatingOrb({ color, size, top, left, right, bottom, blur = 160, opacity = 0.18 }) {
   return (
     <div className="absolute rounded-full pointer-events-none"
-      style={{ width: size, height: size, top, left, right, bottom,
+      style={{
+        width: size, height: size, top, left, right, bottom,
         background: `radial-gradient(circle at 35% 35%, ${color}, transparent 70%)`,
-        filter: `blur(${blur}px)`, opacity }} />
+        filter: `blur(${blur}px)`, opacity
+      }} />
   );
 }
 
@@ -90,8 +92,8 @@ function RingDecor({ size, color, speed = 'spin-ring', dash = '8 6', opacity = 0
    Animated counter number
 ───────────────────────────────────────────────────────── */
 function AnimatedStat({ value, label, color, delay = 0 }) {
-  const ref     = useRef(null);
-  const inView  = useInView(ref, { once: true, margin: '-40px' });
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: '-40px' });
   return (
     <motion.div
       ref={ref}
@@ -101,10 +103,10 @@ function AnimatedStat({ value, label, color, delay = 0 }) {
       whileHover={{ y: -4, scale: 1.04, transition: { duration: 0.2 } }}
       className="text-center py-5 rounded-2xl cursor-default"
       style={{
-        background:     'rgba(6,12,28,0.55)',
-        border:         `1px solid ${color}15`,
+        background: 'rgba(6,12,28,0.55)',
+        border: `1px solid ${color}15`,
         backdropFilter: 'blur(12px)',
-        boxShadow:      `0 0 30px ${color}08`,
+        boxShadow: `0 0 30px ${color}08`,
       }}
     >
       <p className="text-3xl font-black tabular-nums"
@@ -128,10 +130,10 @@ export default function SubmitPage() {
 
       {/* Floating orbs (depth layers) */}
       <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }}>
-        <FloatingOrb color="#00d4ff" size="700px" top="-15%"  left="-10%"  blur={200} opacity={0.13} />
-        <FloatingOrb color="#7c3aed" size="600px" top="20%"   right="-15%" blur={200} opacity={0.10} />
+        <FloatingOrb color="#00d4ff" size="700px" top="-15%" left="-10%" blur={200} opacity={0.13} />
+        <FloatingOrb color="#7c3aed" size="600px" top="20%" right="-15%" blur={200} opacity={0.10} />
         <FloatingOrb color="#00d4ff" size="400px" bottom="-10%" left="30%" blur={160} opacity={0.08} />
-        <FloatingOrb color="#7c3aed" size="300px" top="60%"   right="10%"  blur={120} opacity={0.07} />
+        <FloatingOrb color="#7c3aed" size="300px" top="60%" right="10%" blur={120} opacity={0.07} />
       </div>
 
       {/* Decorative grid overlay */}
@@ -147,9 +149,9 @@ export default function SubmitPage() {
           {/* Glowing ring decor behind heading */}
           <div className="absolute left-1/2 -translate-x-1/2 -translate-y-8 pointer-events-none" style={{ zIndex: 0 }}>
             <div className="relative w-72 h-72 flex items-center justify-center">
-              <RingDecor size={280} color="#00d4ff" speed="spin-ring-slow"    dash="10 8"  opacity={0.13} />
-              <RingDecor size={220} color="#7c3aed" speed="spin-ring-reverse" dash="6 10"  opacity={0.10} />
-              <RingDecor size={160} color="#00d4ff" speed="spin-ring"         dash="4 12"  opacity={0.08} />
+              <RingDecor size={280} color="#00d4ff" speed="spin-ring-slow" dash="10 8" opacity={0.13} />
+              <RingDecor size={220} color="#7c3aed" speed="spin-ring-reverse" dash="6 10" opacity={0.10} />
+              <RingDecor size={160} color="#00d4ff" speed="spin-ring" dash="4 12" opacity={0.08} />
               <div className="absolute w-20 h-20 rounded-full"
                 style={{ background: 'radial-gradient(circle, rgba(0,212,255,0.25) 0%, transparent 70%)', filter: 'blur(20px)' }} />
             </div>
@@ -245,11 +247,11 @@ export default function SubmitPage() {
           <HoverCard
             className="rounded-3xl holo-shimmer border-animated"
             style={{
-              background:          'rgba(255, 255, 255, 0.05)',
-              border:              '1px solid rgba(255, 255, 255, 0.1)',
-              backdropFilter:      'blur(28px)',
-              WebkitBackdropFilter:'blur(28px)',
-              boxShadow:           '0 10px 30px rgba(0,0,0,0.3)',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              backdropFilter: 'blur(28px)',
+              WebkitBackdropFilter: 'blur(28px)',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
               padding: '2rem',
             }}
           >
@@ -300,8 +302,8 @@ export default function SubmitPage() {
         {/* ═══════════════════ STATS ROW ═══════════════════ */}
         <div className="mt-16 grid grid-cols-3 gap-6">
           <AnimatedStat value="100%" label="Open Source" color="#00d4ff" delay={0.68} />
-          <AnimatedStat value="<2m"  label="Scan Time"   color="#7c3aed" delay={0.76} />
-          <AnimatedStat value="2x"   label="Tools Used"  color="#00d4ff" delay={0.84} />
+          <AnimatedStat value="<2m" label="Scan Time" color="#7c3aed" delay={0.76} />
+          <AnimatedStat value="2x" label="Tools Used" color="#00d4ff" delay={0.84} />
         </div>
 
       </main>
