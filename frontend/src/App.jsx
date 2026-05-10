@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import SubmitPage from './pages/SubmitPage';
 import ScanResultPage from './pages/ScanResultPage';
 import HistoryPage from './pages/HistoryPage';
+import AboutPage from './pages/AboutPage';
+import HelpWidget from './components/HelpWidget';
 
 const pageVariants = {
   initial: { opacity: 0, y: 18, scale: 0.99 },
@@ -26,6 +28,7 @@ function AnimatedRoutes() {
           <Route path="/"          element={<SubmitPage />} />
           <Route path="/scans/:id" element={<ScanResultPage />} />
           <Route path="/history"   element={<HistoryPage />} />
+          <Route path="/about"     element={<AboutPage />} />
         </Routes>
       </motion.div>
     </AnimatePresence>
@@ -36,6 +39,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AnimatedRoutes />
+      <HelpWidget />
     </BrowserRouter>
   );
 }

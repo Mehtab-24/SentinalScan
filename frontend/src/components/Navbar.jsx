@@ -62,6 +62,7 @@ export default function Navbar() {
             {[
               { to: '/',        label: 'New Scan' },
               { to: '/history', label: 'History'  },
+              { to: '/about',   label: 'About'    },
             ].map(({ to, label }) => (
               <Link
                 key={to}

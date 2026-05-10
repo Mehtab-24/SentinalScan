@@ -54,8 +54,8 @@ function FeatureChip({ icon, label, description, accentColor, delay = 0 }) {
         {icon}
       </motion.div>
       <div>
-        <p className="text-sm font-bold text-slate-200">{label}</p>
-        <p className="text-xs text-slate-600 mt-1 leading-relaxed">{description}</p>
+        <p className="text-sm font-bold text-slate-100">{label}</p>
+        <p className="text-xs text-slate-300 mt-1 leading-relaxed">{description}</p>
       </div>
     </motion.div>
   );
@@ -113,7 +113,7 @@ function AnimatedStat({ value, label, color, delay = 0 }) {
         style={{ color, textShadow: `0 0 20px ${color}70` }}>
         {value}
       </p>
-      <p className="text-xs text-slate-600 mt-1 font-medium tracking-wide uppercase">{label}</p>
+      <p className="text-xs text-slate-400 mt-1 font-medium tracking-wide uppercase">{label}</p>
     </motion.div>
   );
 }
@@ -269,7 +269,7 @@ export default function SubmitPage() {
               </div>
               <div>
                 <h2 className="text-base font-black text-white">Repository Scanner</h2>
-                <p className="text-xs text-slate-600 mt-0.5">Enter a public GitHub URL to begin analysis</p>
+                <p className="text-xs text-slate-400 mt-0.5">Enter a public GitHub URL to begin analysis</p>
               </div>
               {/* Live dot */}
               <div className="ml-auto flex items-center gap-1.5">
