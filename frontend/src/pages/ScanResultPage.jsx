@@ -752,11 +752,13 @@ export default function ScanResultPage() {
                   {/* 3-card grid: Semgrep + Trivy + Overall */}
                   <motion.div variants={cardVariants} className="grid grid-cols-1 sm:grid-cols-2 gap-4" style={{ marginTop: '1rem' }}>
                     <TiltCard>
-                      <MiniScoreCard label="Semgrep" score={scan.semgrepScore ?? scan.sast_score ?? null}
+                      <MiniScoreCard label="Semgrep" 
+                        count={(scan.semgrepCritical ?? 0) + (scan.semgrepHigh ?? 0) + (scan.semgrepMedium ?? 0) + (scan.semgrepLow ?? 0)}
                         description="Static code analysis" icon="🔬" />
                     </TiltCard>
                     <TiltCard>
-                      <MiniScoreCard label="Trivy" score={scan.trivyScore ?? scan.dependency_score ?? null}
+                      <MiniScoreCard label="Trivy" 
+                        count={(scan.trivyCritical ?? 0) + (scan.trivyHigh ?? 0) + (scan.trivyMedium ?? 0) + (scan.trivyLow ?? 0)}
                         description="Dependency vulnerability scan" icon="📦" />
                     </TiltCard>
                   </motion.div>
@@ -773,7 +775,7 @@ export default function ScanResultPage() {
                           {/* Semgrep */}
                           <div className="rounded-xl p-4" style={{ background: 'rgba(0,212,255,0.04)', border: '1px solid rgba(0,212,255,0.12)' }}>
                             <p className="text-xs font-bold mb-3" style={{ color: '#00d4ff' }}>🔬 Semgrep SAST</p>
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               {[
                                 { label: 'Critical', val: scan.semgrepCritical ?? 0, color: '#f87171' },
                                 { label: 'High',     val: scan.semgrepHigh     ?? 0, color: '#fb923c' },
@@ -781,9 +783,12 @@ export default function ScanResultPage() {
                                 { label: 'Low',      val: scan.semgrepLow      ?? 0, color: '#34d399' },
                               ].map(({ label, val, color }) => (
                                 <div key={label} className="flex items-center justify-between">
-                                  <span className="text-xs text-slate-500">{label}</span>
-                                  <span className="text-sm font-black tabular-nums"
-                                    style={{ color: val > 0 ? color : '#334155', textShadow: val > 0 ? `0 0 8px ${color}70` : 'none' }}>
+                                  <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full" 
+                                    style={{ color: color, background: `${color}15`, border: `1px solid ${color}30` }}>
+                                    {label}
+                                  </span>
+                                  <span className="text-lg font-mono font-black tabular-nums"
+                                    style={{ color: val > 0 ? color : '#334155', textShadow: val > 0 ? `0 0 12px ${color}90` : 'none' }}>
                                     {val}
                                   </span>
                                 </div>
@@ -793,7 +798,7 @@ export default function ScanResultPage() {
                           {/* Trivy */}
                           <div className="rounded-xl p-4" style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.12)' }}>
                             <p className="text-xs font-bold mb-3" style={{ color: '#a855f7' }}>📦 Trivy SCA</p>
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               {[
                                 { label: 'Critical', val: scan.trivyCritical ?? 0, color: '#f87171' },
                                 { label: 'High',     val: scan.trivyHigh     ?? 0, color: '#fb923c' },
@@ -801,9 +806,12 @@ export default function ScanResultPage() {
                                 { label: 'Low',      val: scan.trivyLow      ?? 0, color: '#34d399' },
                               ].map(({ label, val, color }) => (
                                 <div key={label} className="flex items-center justify-between">
-                                  <span className="text-xs text-slate-500">{label}</span>
-                                  <span className="text-sm font-black tabular-nums"
-                                    style={{ color: val > 0 ? color : '#334155', textShadow: val > 0 ? `0 0 8px ${color}70` : 'none' }}>
+                                  <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full" 
+                                    style={{ color: color, background: `${color}15`, border: `1px solid ${color}30` }}>
+                                    {label}
+                                  </span>
+                                  <span className="text-lg font-mono font-black tabular-nums"
+                                    style={{ color: val > 0 ? color : '#334155', textShadow: val > 0 ? `0 0 12px ${color}90` : 'none' }}>
                                     {val}
                                   </span>
                                 </div>
@@ -817,7 +825,10 @@ export default function ScanResultPage() {
 
                   <motion.div variants={cardVariants}>
                     <TiltCard>
-                      <ScoreCard score={scan.overallScore ?? scan.score} grade={computeGrade(scan.overallScore ?? scan.score)} summary={scan.summary} />
+                      <ScoreCard 
+                        count={(scan.semgrepCritical ?? 0) + (scan.semgrepHigh ?? 0) + (scan.semgrepMedium ?? 0) + (scan.semgrepLow ?? 0) + (scan.trivyCritical ?? 0) + (scan.trivyHigh ?? 0) + (scan.trivyMedium ?? 0) + (scan.trivyLow ?? 0)} 
+                        summary={scan.summary} 
+                      />
                     </TiltCard>
                   </motion.div>
 

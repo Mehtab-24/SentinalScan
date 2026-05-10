@@ -1,25 +1,17 @@
 import { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
-import { scoreNeonColor, scoreNeonGlow, scoreBarGradient, scoreLabel } from '../utils/scoreColors';
 
 /**
- * MiniScoreCard — compact neon score tile with score-based glow
- * @param {{ label: string, score: number|null, description?: string, icon?: string }} props
+ * MiniScoreCard — Premium glassmorphism card for finding counts
  */
-export default function MiniScoreCard({ label, score, description, icon }) {
-  const neonColor = scoreNeonColor(score);
-  const neonGlow  = scoreNeonGlow(score);
-  const barGrad   = scoreBarGradient(score);
-  const riskLabel = scoreLabel(score);
-
-  // Determine glow class based on score
-  const glowClass = score == null ? 'score-glow-default'
-    : score >= 80 ? 'score-glow-green'
-    : score >= 50 ? 'score-glow-amber'
-    : 'score-glow-red';
-
+export default function MiniScoreCard({ label, count, description, icon }) {
   const ref    = useRef(null);
   const inView = useInView(ref, { once: true, margin: '-30px' });
+
+  // Neon styling logic
+  const isZero = count === 0;
+  const neonColor = isZero ? '#10b981' : '#f87171'; // emerald for 0, red for >0
+  const glowShadow = isZero ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)';
 
   return (
     <motion.div
@@ -27,67 +19,52 @@ export default function MiniScoreCard({ label, score, description, icon }) {
       initial={{ opacity: 0, y: 20, scale: 0.97 }}
       animate={inView ? { opacity: 1, y: 0, scale: 1 } : {}}
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className={`flex flex-col gap-4 rounded-2xl p-5 relative overflow-hidden ${glowClass}`}
+      className="flex flex-col gap-4 rounded-2xl p-6 relative overflow-hidden group h-full"
       style={{
-        background:     'rgba(4, 10, 22, 0.75)',
-        border:         `1px solid ${neonColor}32`,
+        background: 'rgba(5, 10, 24, 0.7)',
+        border: `1px solid rgba(255, 255, 255, 0.05)`,
         backdropFilter: 'blur(20px)',
       }}
     >
-      {/* Corner accent glow */}
-      <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-3xl pointer-events-none"
-        style={{ background: `radial-gradient(circle at top right, ${neonColor}25, transparent)` }} />
-
-      {/* Top glow strip */}
-      <div className="absolute top-0 left-0 right-0 h-px"
-        style={{ background: `linear-gradient(90deg, transparent, ${neonColor}45, transparent)` }} />
+      {/* Animated glowing border effect */}
+      <motion.div className="absolute inset-0 rounded-2xl pointer-events-none"
+        animate={{ boxShadow: [`inset 0 0 5px ${glowShadow}`, `inset 0 0 15px ${glowShadow}`, `inset 0 0 5px ${glowShadow}`] }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        style={{ border: `1px solid ${neonColor}30` }} 
+      />
 
       {/* Label row */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-3 relative z-10">
         {icon && (
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg text-base"
-            style={{ background: `${neonColor}18`, border: `1px solid ${neonColor}30`, boxShadow: `0 0 12px ${neonColor}20` }}>
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl text-lg bg-slate-900/50 border border-slate-700/50 shadow-inner">
             {icon}
           </span>
         )}
         <div>
-          <p className="text-xs font-bold tracking-widest uppercase"
-            style={{ color: neonColor, textShadow: `0 0 8px ${neonGlow}` }}>
+          <p className="text-sm font-bold tracking-wider text-slate-200">
             {label}
           </p>
-          {description && <p className="text-xs text-slate-600 mt-0.5">{description}</p>}
+          {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
         </div>
       </div>
 
-      {/* Score number */}
-      <div className="flex items-baseline gap-1.5">
+      {/* Findings Count */}
+      <div className="flex flex-col mt-3 relative z-10">
         <motion.span
-          className="text-5xl font-black leading-none tabular-nums"
-          initial={{ opacity: 0, scale: 0.7 }}
+          className="text-5xl font-mono font-black tabular-nums tracking-tight"
+          initial={{ opacity: 0, scale: 0.8 }}
           animate={inView ? { opacity: 1, scale: 1 } : {}}
-          transition={{ duration: 0.5, delay: 0.2, type: 'spring', stiffness: 160 }}
-          style={{ color: neonColor, textShadow: `0 0 20px ${neonGlow}, 0 0 40px ${neonGlow}60` }}
+          transition={{ duration: 0.6, delay: 0.1, type: 'spring', stiffness: 150 }}
+          style={{ 
+            color: neonColor, 
+            textShadow: `0 0 15px ${neonColor}80` 
+          }}
         >
-          {score ?? '—'}
+          {count ?? 0}
         </motion.span>
-        <span className="text-sm text-slate-600 mb-1">/ 100</span>
-      </div>
-
-      {/* Bar */}
-      <div className="space-y-1.5">
-        <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ background: 'rgba(30,41,59,0.8)' }}>
-          <motion.div
-            className="h-full rounded-full"
-            initial={{ width: 0 }}
-            animate={inView ? { width: score != null ? `${score}%` : '0%' } : {}}
-            transition={{ duration: 1.0, delay: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            style={{ background: barGrad, boxShadow: `0 0 6px ${neonGlow}` }}
-          />
-        </div>
-        <p className="text-xs font-bold tracking-widest uppercase text-right"
-          style={{ color: `${neonColor}80` }}>
-          {riskLabel}
-        </p>
+        <span className="text-[10px] font-bold tracking-widest uppercase mt-2 text-slate-500">
+          Total Findings
+        </span>
       </div>
     </motion.div>
   );
