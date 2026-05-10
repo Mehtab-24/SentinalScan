@@ -16,15 +16,31 @@ import java.util.UUID;
 @Slf4j
 public class TempDirManager {
 
-    private static final Path BASE_DIR = Paths.get(System.getProperty("java.io.tmpdir"), "sentinelscan");
+    /**
+     * Base directory for scan working directories.
+     *
+     * We deliberately avoid {@code java.io.tmpdir} because Windows resolves it
+     * to an 8.3 short path (e.g. {@code C:\Users\MEHTAB~1\AppData\Local\Temp})
+     * which Docker Desktop cannot mount via {@code -v}.
+     *
+     * Instead we use {@code ./scans/} relative to the JVM working directory
+     * (i.e. the {@code backend/} project folder when launched with
+     * {@code .\run-real.bat}).  {@code toAbsolutePath().normalize()} converts
+     * it to a full, long-form Windows path with no short-name components, so
+     * Docker accepts it without modification.
+     */
+    private static final Path BASE_DIR =
+            Paths.get("scans").toAbsolutePath().normalize();
 
     /**
-     * Creates a unique temporary directory for a scan job under /tmp/sentinelscan/{scanId}.
+     * Creates a working directory for a scan job at {@code ./scans/{scanId}}.
+     * Returns the absolute, normalized path so Docker {@code -v} mounts receive
+     * a long-form Windows path (no 8.3 short-name components).
      */
     public Path createTemp(UUID scanId) throws IOException {
         Path dir = BASE_DIR.resolve(scanId.toString());
         Files.createDirectories(dir);
-        log.debug("Created temp dir: {}", dir);
+        log.info("Created scan working dir: {}", dir.toAbsolutePath());
         return dir;
     }
 

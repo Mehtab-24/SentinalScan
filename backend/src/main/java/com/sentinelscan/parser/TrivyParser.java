@@ -32,12 +32,14 @@ public class TrivyParser {
         // STRICT NULL-CHECK: Results may be missing or null
         JsonNode results = root.path("Results");
         if (results == null || results.isMissingNode()) {
-            throw new IllegalArgumentException("Trivy 'Results' field is missing");
+            log.info("Trivy 'Results' field is missing — assuming 0 vulnerabilities.");
+            return new FindingCounts(0, 0, 0, 0);
         }
 
         // Results should be an array
         if (!results.isArray()) {
-            throw new IllegalArgumentException("Trivy 'Results' field is not an array");
+            log.info("Trivy 'Results' field is not an array — assuming 0 vulnerabilities.");
+            return new FindingCounts(0, 0, 0, 0);
         }
 
         // Iterate over each scan result

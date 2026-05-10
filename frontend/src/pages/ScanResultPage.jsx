@@ -158,46 +158,17 @@ const PHASE_DB_DOWNLOAD = 10;   // seconds — show Trivy DB warning
 const PHASE_STILL_WORKING = 30; // seconds — "still analysing" message
 const PHASE_TIMEOUT_WARN = 180; // seconds — 3 min timeout warning
 
-/* ── Active Scanning — Terminal UI ── */
+/* ── Active Scanning — Simplified UI ── */
 function TerminalScanUI({ scanId, onRetry, scanStatus }) {
-  const [visibleLines, setVisibleLines] = useState(0);
-  const [elapsed, setElapsed] = useState(0); // seconds since mount
-
-  // Map backend status to progress percentage
-  const getProgressFromStatus = (status) => {
-    switch (status) {
-      case 'PENDING': return 10;
-      case 'CLONING': return 30;
-      case 'SEMGREP_RUNNING': return 50;
-      case 'TRIVY_RUNNING': return 75;
-      case 'SCORING': return 90;
-      case 'COMPLETED': return 100;
-      case 'FAILED': return 100; // Will show error state
-      default: return 0;
-    }
-  };
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    const timers = TERMINAL_LINES.map((line, i) =>
-      setTimeout(() => setVisibleLines(v => Math.max(v, i + 1)), line.delay * 1000)
-    );
-    // Wall-clock elapsed seconds counter
     const elapsedTimer = setInterval(() => setElapsed(s => s + 1), 1000);
-    return () => { timers.forEach(clearTimeout); clearInterval(elapsedTimer); };
+    return () => clearInterval(elapsedTimer);
   }, []);
 
-  const progress = getProgressFromStatus(scanStatus);
   const isFailed = scanStatus === 'FAILED';
-
-  // Derive phase from elapsed time
-  const isDbDownload   = elapsed >= PHASE_DB_DOWNLOAD && elapsed < PHASE_STILL_WORKING;
-  const isStillWorking = elapsed >= PHASE_STILL_WORKING && elapsed < PHASE_TIMEOUT_WARN;
-  const isTimeoutWarn  = elapsed >= PHASE_TIMEOUT_WARN;
-
-  // Format elapsed as m:ss
-  const elapsedLabel = elapsed < 60
-    ? `${elapsed}s`
-    : `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`;
+  const isTimeoutWarn = elapsed >= 180;
 
   return (
     <motion.div
@@ -210,102 +181,9 @@ function TerminalScanUI({ scanId, onRetry, scanStatus }) {
         <div className="absolute top-0 left-8 right-8 h-px"
           style={{ background: 'linear-gradient(90deg, transparent, rgba(0,212,255,0.5), transparent)' }} />
 
-        <div className="px-7 py-6 flex items-center gap-3 border-b" style={{ borderColor: 'rgba(0,212,255,0.08)' }}>
-          <ScannerOrb size={56} />
-          <div>
-            <p className="text-base font-black" style={{ color: '#00d4ff', textShadow: '0 0 20px rgba(0,212,255,0.5)' }}>
-              Security Analysis In Progress
-            </p>
-            <p className="text-xs text-slate-500 font-mono mt-0.5">SCAN_ID · {scanId}</p>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            {/* Elapsed timer */}
-            <span className="text-xs font-mono tabular-nums" style={{ color: 'rgba(0,212,255,0.4)' }}>{elapsedLabel}</span>
-            <span className="h-2 w-2 rounded-full animate-pulse" style={{ background: '#00d4ff', boxShadow: '0 0 8px #00d4ff' }} />
-            <span className="text-xs font-bold" style={{ color: 'rgba(0,212,255,0.6)' }}>LIVE</span>
-          </div>
-        </div>
-
-        {/* Terminal output */}
-        <div className="scan-beam-container px-7 py-6 space-y-1.5 min-h-[220px]">
-          <AnimatePresence>
-            {TERMINAL_LINES.slice(0, visibleLines).map((line, i) => (
-              <motion.div key={i}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}>
-                <TerminalLine text={line.text} color={line.color} blink={line.blink && i === visibleLines - 1} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-
-        {/* ── Time-based status banners ── */}
-        <AnimatePresence mode="wait">
-          {isTimeoutWarn && (
-            <motion.div key="timeout"
-              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.35 }}
-              className="mx-7 mb-4 rounded-xl px-4 py-3 flex items-start gap-3"
-              style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)' }}
-            >
-              <span className="shrink-0 mt-0.5 text-sm">⚠</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-black" style={{ color: '#f87171' }}>
-                  Scan taking longer than expected ({elapsedLabel})
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  The process may be stuck or waiting for the Trivy CVE DB (~500 MB). You can retry.
-                </p>
-              </div>
-              <motion.button
-                onClick={onRetry}
-                whileHover={{ backgroundColor: 'rgba(251, 146, 60, 0.15)' }}
-                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black transition-all duration-300"
-                style={{ background: 'transparent', border: '1px solid rgba(251, 146, 60, 0.4)', color: '#fb923c' }}
-              >
-                ↺ Retry
-              </motion.button>
-            </motion.div>
-          )}
-          {isStillWorking && !isTimeoutWarn && (
-            <motion.div key="still"
-              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.35 }}
-              className="mx-7 mb-4 rounded-xl px-4 py-3 flex items-center gap-3"
-              style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.18)' }}
-            >
-              <Spinner size="h-3.5 w-3.5" color="text-yellow-400" />
-              <div>
-                <p className="text-xs font-black" style={{ color: '#fbbf24' }}>
-                  Still working… analysing dependencies ({elapsedLabel})
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">Trivy is scanning the dependency graph — hang tight.</p>
-              </div>
-            </motion.div>
-          )}
-          {isDbDownload && !isStillWorking && !isTimeoutWarn && (
-            <motion.div key="db"
-              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.35 }}
-              className="mx-7 mb-4 rounded-xl px-4 py-3 flex items-center gap-3"
-              style={{ background: 'rgba(168,85,247,0.07)', border: '1px solid rgba(168,85,247,0.22)' }}
-            >
-              <Spinner size="h-3.5 w-3.5" color="text-purple-400" />
-              <div>
-                <p className="text-xs font-black" style={{ color: '#a855f7' }}>
-                  Downloading vulnerability database (first run)
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">Trivy CVE DB is ~500 MB — this may take a few minutes.</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Progress bar or Error state */}
-        <div className="px-7 pb-6">
-          {isFailed ? (
-            <div className="rounded-xl px-4 py-3 flex items-center gap-3"
+        {isFailed ? (
+          <div className="px-7 py-8 flex flex-col items-center justify-center min-h-[300px]">
+            <div className="rounded-xl px-4 py-3 flex items-center gap-3 w-full"
               style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)' }}>
               <span className="shrink-0 text-sm">❌</span>
               <div className="flex-1">
@@ -325,25 +203,23 @@ function TerminalScanUI({ scanId, onRetry, scanStatus }) {
                 ↺ Retry
               </motion.button>
             </div>
-          ) : (
-            <>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs terminal-text" style={{ color: 'rgba(0,212,255,0.5)' }}>Analysis Progress</span>
-                <span className="text-xs terminal-text font-bold" style={{ color: '#00d4ff' }}>{Math.round(progress)}%</span>
-              </div>
-              <div className="h-2 rounded-full overflow-hidden progress-beam"
-                style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(0,212,255,0.1)' }}>
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: 'linear-gradient(90deg, #0055bb, #00d4ff, #06b6d4)' }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
-                />
-              </div>
-              <p className="text-xs text-slate-600 mt-2 text-center">Auto-refreshing every 4s · Trivy first-run may take up to 5 min</p>
-            </>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="py-20 flex flex-col items-center justify-center gap-6 min-h-[300px]">
+            <ScannerOrb size={120} />
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-black" style={{ color: '#00d4ff', textShadow: '0 0 20px rgba(0,212,255,0.5)' }}>
+                Analyzing Repository...
+              </h2>
+              <p className="text-sm text-slate-400">This may take up to 60 seconds.</p>
+              {isTimeoutWarn && (
+                <p className="text-xs text-yellow-500 mt-4">
+                  Scan is taking longer than expected. <button onClick={onRetry} className="underline hover:text-yellow-400">Retry?</button>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </GlassPanel>
     </motion.div>
   );
@@ -502,6 +378,70 @@ const cardVariants = {
   show:   { opacity: 1, y: 0, scale: 1, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
 };
 
+/* ── Repo Summary Card ── */
+function RepoSummaryCard({ repoUrl }) {
+  const [info, setInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!repoUrl) {
+      setLoading(false);
+      return;
+    }
+    // Extract owner/repo from URL
+    const match = repoUrl.match(/github\.com\/([^\/]+\/[^\/]+)/);
+    if (!match) {
+      setLoading(false);
+      return;
+    }
+    const repoPath = match[1].replace('.git', '');
+    
+    fetch(`https://api.github.com/repos/${repoPath}`)
+      .then(res => res.json())
+      .then(data => {
+        setInfo(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
+  }, [repoUrl]);
+
+  if (loading) {
+    return (
+      <TiltCard className="mb-5">
+        <GlassPanel className="p-5 flex items-center justify-center min-h-[100px]">
+          <Spinner size="h-5 w-5" color="text-cyan-400" />
+        </GlassPanel>
+      </TiltCard>
+    );
+  }
+
+  const description = info?.description || "Summary unavailable for this repository.";
+  const language = info?.language;
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+      <TiltCard className="mb-5">
+        <GlassPanel>
+          <div className="px-7 py-5 flex flex-col gap-3">
+            <h3 className="text-sm font-bold text-slate-200">Project Summary</h3>
+            <p className="text-sm text-slate-400 leading-relaxed">{description}</p>
+            {language && (
+              <div className="mt-1">
+                <span className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium"
+                  style={{ background: 'rgba(0,212,255,0.1)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.2)' }}>
+                  Primary Language: {language}
+                </span>
+              </div>
+            )}
+          </div>
+        </GlassPanel>
+      </TiltCard>
+    </motion.div>
+  );
+}
+
 /**
  * ScanResultPage — live-polling scan detail with full 3D treatment.
  */
@@ -632,6 +572,9 @@ export default function ScanResultPage() {
 
         {scan && (
           <>
+            {/* ── Repo Summary Card ── */}
+            <RepoSummaryCard repoUrl={scan.repoUrl} />
+
             {/* ── Header card ── */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
               <TiltCard>

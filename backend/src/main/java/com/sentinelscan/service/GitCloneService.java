@@ -100,11 +100,12 @@ public class GitCloneService {
      */
     public void cloneRepository(String repoUrl, String destinationPath, String scanJobId) {
         try {
-            log.info("Starting JGit clone for repository: {} to path: {}", repoUrl, destinationPath);
+            log.info("Starting shallow clone (depth=1) for: {} → {}", repoUrl, destinationPath);
+            long t0 = System.currentTimeMillis();
 
             jgitWrapper.cloneRepository(repoUrl, destinationPath);
 
-            log.info("Successfully cloned repository: {}", repoUrl);
+            log.info("Clone completed in {}ms for: {}", System.currentTimeMillis() - t0, repoUrl);
 
         } catch (InvalidRemoteException e) {
             String errorMessage = "Invalid repository URL: " + repoUrl;

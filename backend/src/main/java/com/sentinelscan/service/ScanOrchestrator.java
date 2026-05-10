@@ -31,8 +31,11 @@ public class ScanOrchestrator {
     @Value("${scan.mode:real}")
     private String scanMode;
 
-    /** Timeout in minutes for each external process (clone, Semgrep, Trivy).
-     *  15 min accommodates first-run Trivy CVE DB download (~500 MB on slow networks). */
+    /**
+     * Timeout in minutes for each external process (clone, Semgrep, Trivy).
+     * 15 min accommodates first-run Trivy CVE DB download (~500 MB on slow
+     * networks).
+     */
     private static final int PROCESS_TIMEOUT_MIN = 15;
 
     private final ScanJobRepository repository;
@@ -134,15 +137,16 @@ public class ScanOrchestrator {
             // Each list element is one complete OS argument, so spaces in the path
             // are handled correctly WITHOUT any shell quoting.
             // e.g. "-v", "C:/Users/Mehtab Singh/tmp/scan:/src" → one arg, no issue.
-            // Output is written to /src/semgrep-results.json (= <repoPath>/semgrep-results.json).
+            // Output is written to /src/semgrep-results.json (=
+            // <repoPath>/semgrep-results.json).
             // Exit code 0 = no findings, 1 = findings found — both are valid.
             // Exit code 2+ = actual error.
             String dockerRepoPath = toDockerPath(repoPath);
 
             ProcessResult semgrepResult = processRunner.run(
                     List.of(
-                            "docker", "run", "--rm",
-                            "-v", dockerRepoPath + ":/src",   // spaces safe — no shell parsing
+                            "C:/Program Files/Docker/Docker/resources/bin/docker.exe", "run", "--rm",
+                            "-v", dockerRepoPath + ":/src", // spaces safe — no shell parsing
                             "returntocorp/semgrep",
                             "semgrep", "scan",
                             "--config", "auto",
@@ -150,7 +154,7 @@ public class ScanOrchestrator {
                             "-o", "/src/semgrep-results.json",
                             "/src"),
                     PROCESS_TIMEOUT_MIN,
-                    null);  // working dir not needed; Docker manages paths
+                    null); // working dir not needed; Docker manages paths
 
             if (semgrepResult.exitCode() >= 2) {
                 String errorDetails = !semgrepResult.stderr().isBlank()
@@ -173,17 +177,17 @@ public class ScanOrchestrator {
 
             // ── Step 5 ─ Trivy via Docker ─────────────────────────────────────
             // Two volume mounts:
-            //   1. <repoPath>:/src          — the code to scan (spaces safe, no quoting)
-            //   2. trivy-cache:/root/.cache/trivy — NAMED Docker volume that persists
-            //      the CVE database across runs.  Without this every ephemeral container
-            //      re-downloads ~500 MB of DB data.
+            // 1. <repoPath>:/src — the code to scan (spaces safe, no quoting)
+            // 2. trivy-cache:/root/.cache/trivy — NAMED Docker volume that persists
+            // the CVE database across runs. Without this every ephemeral container
+            // re-downloads ~500 MB of DB data.
             // Output is written to /src/trivy-results.json → <repoPath>/trivy-results.json,
             // exactly where the existing parser looks.
             ProcessResult trivyResult = processRunner.run(
                     List.of(
                             "docker", "run", "--rm",
-                            "-v", dockerRepoPath + ":/src",           // repo mount (spaces OK)
-                            "-v", "trivy-cache:/root/.cache/trivy",  // persistent DB cache
+                            "-v", dockerRepoPath + ":/src", // repo mount (spaces OK)
+                            "-v", "trivy-cache:/root/.cache/trivy", // persistent DB cache
                             "aquasec/trivy",
                             "fs",
                             "--scanners", "vuln",
@@ -191,7 +195,7 @@ public class ScanOrchestrator {
                             "--output", "/src/trivy-results.json",
                             "/src"),
                     PROCESS_TIMEOUT_MIN,
-                    null);  // working dir not needed; Docker manages paths
+                    null); // working dir not needed; Docker manages paths
 
             if (trivyResult.exitCode() >= 2) {
                 String errorDetails = !trivyResult.stderr().isBlank()
@@ -255,13 +259,34 @@ public class ScanOrchestrator {
             log.info("Scan {} completed in {}ms — overall score: {}", scanId, durationMs, overallScore);
 
         } catch (Exception e) {
-            log.error("Scan {} failed: {}", scanId, e.getMessage(), e);
+            // ── EMERGENCY DIAGNOSTICS ─────────────────────────────────────────
+            // Print the full stack trace unconditionally so it always appears
+            // in the console even when the @Async thread would otherwise swallow it.
+            e.printStackTrace();
+            log.error("[DIAGNOSTIC] *** SCAN {} FAILED — FULL EXCEPTION BELOW ***", scanId);
+            log.error("[DIAGNOSTIC] Exception type   : {}", e.getClass().getName());
+            log.error("[DIAGNOSTIC] Exception message: {}", e.getMessage());
+            if (e.getCause() != null) {
+                log.error("[DIAGNOSTIC] Root cause type  : {}", e.getCause().getClass().getName());
+                log.error("[DIAGNOSTIC] Root cause msg   : {}", e.getCause().getMessage());
+            }
+            log.error("Failed to launch Docker process: ", e);
+
+            // Build a human-readable error message for the DB / React frontend.
+            // Prefer the root cause message (e.g. "error=2, No such file or directory")
+            // because it tells us WHY docker failed to start.
+            String rootMsg = (e.getCause() != null && e.getCause().getMessage() != null)
+                    ? e.getCause().getMessage()
+                    : e.getMessage();
+            String errorMsg = e.getClass().getSimpleName() + ": " + rootMsg;
+
             long durationMs = System.currentTimeMillis() - wallStart;
             job.setStatus(ScanStatus.FAILED);
-            job.setErrorMessage(e.getMessage());
+            job.setErrorMessage(errorMsg); // surfaced in the React status poll
             job.setCompletedAt(LocalDateTime.now());
             job.setDurationMs(durationMs);
             repository.save(job);
+            log.info("[DIAGNOSTIC] Scan {} marked FAILED in DB. Error stored: {}", scanId, errorMsg);
 
         } finally {
             // Always clean up temp directory

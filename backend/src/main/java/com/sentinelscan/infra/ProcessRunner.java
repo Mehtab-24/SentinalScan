@@ -59,7 +59,35 @@ public class ProcessRunner {
             pb.directory(workingDirectory);
         }
 
-        Process process = pb.start();
+        // ── DIAGNOSTIC: print the EXACT command before launch ─────────────────
+        // This fires even if the process fails to start (e.g. "docker" not on PATH).
+        String flatCommand = String.join(" ", command);
+        log.info("[DIAGNOSTIC] About to launch process. Full command: {}", flatCommand);
+        log.info("[DIAGNOSTIC] Working directory: {}",
+                workingDirectory != null ? workingDirectory.getAbsolutePath() : "<JVM default>");
+        log.info("[DIAGNOSTIC] PATH from environment: {}", pb.environment().getOrDefault("PATH", "<not set>"));
+
+        Process process;
+        try {
+            process = pb.start();
+            log.info("[DIAGNOSTIC] Process started successfully. PID: {}",
+                    process.toHandle().pid());
+        } catch (IOException startEx) {
+            // "Cannot run program" lands here — log everything before re-throwing
+            log.error("[DIAGNOSTIC] *** FAILED TO LAUNCH PROCESS ***");
+            log.error("[DIAGNOSTIC] Command       : {}", flatCommand);
+            log.error("[DIAGNOSTIC] Exception type: {}", startEx.getClass().getName());
+            log.error("[DIAGNOSTIC] Message       : {}", startEx.getMessage());
+            if (startEx.getCause() != null) {
+                log.error("[DIAGNOSTIC] Root cause    : {} — {}",
+                        startEx.getCause().getClass().getName(), startEx.getCause().getMessage());
+            }
+            startEx.printStackTrace(); // guarantee full trace appears in the console
+            throw new IOException(
+                    "Failed to launch process '" + command.get(0) + "': " + startEx.getMessage()
+                    + (startEx.getCause() != null ? " (caused by: " + startEx.getCause().getMessage() + ")" : ""),
+                    startEx);
+        }
 
         // CRITICAL: Drain stdout and stderr CONCURRENTLY to prevent deadlock
         // If we drain stdout first and it blocks waiting for the process to drain

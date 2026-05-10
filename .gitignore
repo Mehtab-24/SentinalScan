@@ -30,3 +30,6 @@ logs/
 
 # Temporary files
 tmp/
+
+# Scan working directories (cloned repos — can be large, must not be committed)
+backend/scans/
