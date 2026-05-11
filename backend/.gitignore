@@ -1,0 +1,28 @@
+# ─── Maven build output ────────────────────────────────────
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ─── Spring Boot exploded jar ──────────────────────────────
+BOOT-INF/
+
+# ─── Application secrets ───────────────────────────────────
+src/main/resources/application-local.yml
+src/main/resources/application-secret.yml
+src/main/resources/application-prod.yml
+
+# ─── jqwik property-test database ──────────────────────────
+.jqwik-database
+
+# ─── Compiled Java ─────────────────────────────────────────
+*.class
+
+# ─── Temp / cloned repos (SentinelScan clones repos to scan) ──
+tmp/
+temp/
+cloned-repos/
+
+# ─── IntelliJ ──────────────────────────────────────────────
+.idea/
+*.iml

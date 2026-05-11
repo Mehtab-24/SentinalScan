@@ -1,35 +1,20 @@
-# =====================
-# Java / Spring Boot
-# =====================
-target/
-*.log
-*.class
-
-# Maven
-.mvn/
-.mvn/wrapper/maven-wrapper.jar
-
-# IDE
-.vscode/
-.idea/
-*.iml
-
-# OS
+# ─── OS & Editor ───────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
+*.swp
+*.swo
+.idea/
+*.iml
+.vscode/
+*.code-workspace
 
-# Environment files
-.env
+# ─── Kilo / Kiro / Continue (AI tooling) ───────────────────
+.kilo/worktrees/
+.kiro/
+.continue/
+.amazonq/
 
-# Node (future frontend)
-node_modules/
-dist/
-
-# Logs
+# ─── Logs ──────────────────────────────────────────────────
+*.log
 logs/
-
-# Temporary files
-tmp/
-
-# Scan working directories (cloned repos — can be large, must not be committed)
-backend/scans/
